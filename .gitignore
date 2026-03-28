@@ -1,0 +1,10 @@
+# Ignore design files
+/designs
+
+# Temporary/Workspace specific files
+test.html
+Untitled-1.txt
+
+PRD.md
+Architecture.md
+Directory_Structure.md

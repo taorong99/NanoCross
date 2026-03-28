@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NanoCross - 芯片工艺截面绘制</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- Vue 3 Global & Math.js -->
+    <style>
+        .flashing-ctrl {
+            animation: pulseFlash 1s infinite;
+            border-color: #4A90E2 !important;
+        }
+        .highlight-ctrl {
+            border-color: #4A90E2 !important;
+        }
+        @keyframes pulseFlash {
+            0% { border-color: #4A90E2; box-shadow: inset 0 0 5px rgba(74, 144, 226, 0.2); }
+            50% { border-color: #fff; box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.8); }
+            100% { border-color: #4A90E2; box-shadow: inset 0 0 5px rgba(74, 144, 226, 0.2); }
+        }
+        .flashing-path {
+            animation: pulsePath 1s infinite alternate;
+        }
+        @keyframes pulsePath {
+            0% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+    </style>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/mathjs@11.8.0/lib/browser/math.js"></script>
+</head>
+<body>
+    <div id="app" style="outline: none;">
+        <!-- 第一列：Layer List -->
+        <div id="layers-panel" class="panel" :style="{ width: layersWidth + 'px' }">
+            <div style="padding: 15px; border-bottom: 1px solid #3d3d3d;">
+                <h3 style="margin: 0; color: #fff;">工艺步骤</h3>
+            </div>
+            <div class="layer-list" style="flex-grow: 1; overflow-y: auto;">
+                <div v-for="(step, index) in processSteps" :key="step.id" 
+                     class="layer-item" 
+                     :class="{ active: index === activeLayerIndex }"
+                     @click="activeLayerIndex = index"
+                     @mouseover="hoverLayerIndex = index"
+                     @mouseout="hoverLayerIndex = -1"
+                     draggable="true" 
+                     @dragstart="onDragStart($event, index)"
+                     @dragover.prevent 
+                     @drop="onDrop($event, index)">
+                    
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span style="color: #666; font-size: 11px;">{{ index }}</span>
+                        <div :style="{ width: '12px', height: '12px', background: (step.type === 'etch' || step.type === 'cmp') ? '#ffffff' : step.color, borderRadius: '2px', border: '1px solid #555' }"></div>
+                        <span style="font-size: 13px;">{{ step.name }}</span>
+                    </div>
+                    
+                    <div style="display: flex; gap: 8px;">
+                        <span class="layer-visibility" @click.stop="step.visible ? processSteps.forEach((s, idx) => { if(idx >= index) s.visible = false; }) : processSteps.forEach(s => s.visible = true)" :title="step.visible ? '隐藏当前及之后工艺' : '取消隐藏'">
+                            {{ step.visible ? '👁️' : '🚫' }}
+                        </span>
+                        <span @click.stop="deleteStep(index)" style="color: #ff4757; font-size: 14px; cursor: pointer;" title="删除此步工艺">❌</span>
+                    </div>
+                </div>
+            </div>
+            <div style="padding: 10px; border-top: 1px solid #3d3d3d; display: flex; gap: 5px; flex-wrap: wrap;">
+                <button class="btn btn-small" @click="addStep('deposit')">+ 沉积</button>
+                <button class="btn btn-small" @click="addStep('etch')">+ 刻蚀</button>
+                <button class="btn btn-small" @click="addStep('cmp')">+ CMP</button>
+            </div>
+        </div>
+
+        <!-- 拖拽条1 -->
+        <div class="resizer" @mousedown.prevent="startResize($event, 'layers')"></div>
+
+        <!-- 第二列：属性与变量编辑 (放在中间) -->
+        <div id="properties-panel" class="panel" :style="{ width: propsWidth + 'px' }">
+            <div v-if="activeStep">
+                <h4 style="margin-top: 0; color: #4A90E2;">步骤属性</h4>
+                
+                <div class="form-group" style="display: flex; gap: 10px;">
+                    <div style="flex: 1; min-width: 0;">
+                        <label>名称</label>
+                        <input type="text" v-model="activeStep.name" class="form-control" @keyup.enter="$event.target.blur()">
+                    </div>
+                    <div v-if="activeStep.type === 'deposit'" style="flex: 1; min-width: 0;">
+                        <label>材料</label>
+                        <input type="text" v-model="activeStep.material" class="form-control" placeholder="如 Nb, SiO2" @keyup.enter="$event.target.blur()">
+                    </div>
+                </div>
+                
+                <div class="form-group" v-show="activeLayerIndex !== 0" style="display: flex; gap: 10px; align-items: flex-end;">
+                    <div style="flex: 3; min-width: 0;">
+                        <label>类型 (deposit/etch/cmp)</label>
+                        <select v-model="activeStep.type" class="form-control">
+                            <option value="deposit">Deposit</option>
+                            <option value="etch">Etch</option>
+                            <option value="cmp">CMP</option>
+                        </select>
+                    </div>
+                    <div v-if="activeStep.type === 'deposit'" style="flex: 1; min-width: 0;">
+                        <label>颜色</label>
+                        <input type="color" v-model="activeStep.color" class="form-control" style="height: 38px; padding: 2px; cursor: pointer;">
+                    </div>
+                </div>
+
+                <div class="form-group" style="display: flex; gap: 10px; align-items: flex-start;">
+                    <div style="flex: 1; min-width: 0;">
+                        <label>{{ activeLayerIndex === 0 ? '衬底厚度' : (activeStep.type === 'cmp' ? '抛光厚度' : (activeStep.type === 'etch' ? '刻蚀深度' : '沉积厚度')) }}</label>
+                        <div style="display: flex; gap: 5px; align-items: center; margin-top: 5px;">
+                            <input type="range" v-model.number="activeStep.thickness" min="0" max="200" style="flex: 1; min-width: 0;">
+                            <input type="number" v-model.number="activeStep.thickness" class="form-control" style="width: 50px; padding: 2px 4px;" @keyup.enter="$event.target.blur()">
+                        </div>
+                    </div>
+                    <div v-if="activeStep.type !== 'cmp' && activeLayerIndex !== 0" style="flex: 1; min-width: 0;">
+                        <label>侧壁角度 (°)</label>
+                        <div style="display: flex; gap: 5px; align-items: center; margin-top: 5px;">
+                            <input type="range" v-model.number="activeStep.angle" min="30" max="90" style="flex: 1; min-width: 0;">
+                            <input type="number" v-model.number="activeStep.angle" class="form-control" style="width: 50px; padding: 2px 4px;" @keyup.enter="$event.target.blur()">
+                        </div>
+                    </div>
+                </div>
+
+                <div v-if="activeLayerIndex === 0 && activeStep.patterns && activeStep.patterns[0]" class="form-group">
+                    <label>衬底宽度</label>
+                    <div style="display: flex; gap: 10px; align-items: center; margin-top: 5px;">
+                        <input type="range" v-model.number="activeStep.patterns[0].w" min="100" max="2000" style="flex-grow: 1;">
+                        <input type="number" v-model.number="activeStep.patterns[0].w" class="form-control" style="width: 60px;" @keyup.enter="$event.target.blur()">
+                    </div>
+                </div>
+
+                <div v-if="activeStep.type !== 'cmp'" v-show="activeLayerIndex !== 0">
+                    <h5 style="color: #aaa; margin: 15px 0 5px;">图案列表</h5>
+                    <div v-for="(pat, pIdx) in activeStep.patterns" :key="pIdx" class="pattern-card"
+                         :class="{ 'flashing-ctrl': flashingPatternIndex === pIdx, 'highlight-ctrl': focusedPatternIndex === pIdx && flashingPatternIndex !== pIdx }"
+                         @mouseenter="hoverCardPatternIndex = pIdx"
+                         @mouseleave="hoverCardPatternIndex = -1"
+                         @click.stop="focusedPatternIndex = pIdx; flashingPatternIndex = -1">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                            <span style="font-size: 12px; color: #fff;">图案 {{ pIdx + 1 }}</span>
+                            <span @click="removePattern(pIdx)" style="cursor: pointer; color: #ff4757; font-size: 12px;" title="删除图案">❌</span>
+                        </div>
+                        <div style="display: flex; gap: 5px; width: 100%;">
+                            <pattern-input v-model="pat.x" label="X坐标" :variables="variables" style="flex: 1; min-width: 0;"></pattern-input>
+                            <pattern-input v-model="pat.w" label="宽 度" :variables="variables" style="flex: 1; min-width: 0;"></pattern-input>
+                        </div>
+                    </div>
+                    <button class="btn btn-small" @click="addPattern" style="width: 100%;">+ 添加图案</button>
+                </div>
+
+            </div>
+            <div v-else style="color: #666; font-size: 13px; text-align: center; margin-top: 50px;">
+                请选择一个工艺步骤
+            </div>
+        </div>
+
+        <!-- 拖拽条2 -->
+        <div class="resizer" @mousedown.prevent="startResize($event, 'props')"></div>
+
+        <!-- 第三列：SVG 画布 -->
+        <div class="canvas-container" @mousedown.left="startPan" @click="focusedPatternIndex = -1; flashingPatternIndex = -1" :key="triggerResize">
+             
+             <!-- 左上角功能按钮 -->
+             <div style="position: absolute; top: 20px; left: 20px; z-index: 100; display: flex; flex-direction: column; gap: 8px;">
+                 <button class="btn btn-small" style="margin-bottom: 0; min-width: 60px; box-shadow: 0 2px 6px rgba(0,0,0,0.3);" @click.stop="loadFile">加载</button>
+                 <button class="btn btn-small" style="margin-bottom: 0; min-width: 60px; box-shadow: 0 2px 6px rgba(0,0,0,0.3);" @click.stop="saveFile">保存</button>
+                 <button class="btn btn-small" style="margin-bottom: 0; min-width: 60px; box-shadow: 0 2px 6px rgba(0,0,0,0.3);" @click.stop="exportFile">导出</button>
+             </div>
+
+             <!-- 画布居中上方的项目名称 -->
+             <div style="position: absolute; top: 20px; left: 50%; transform: translateX(-50%); z-index: 100; text-align: center;" @mousedown.stop>
+                 <input type="text" v-model="projectName" :placeholder="'输入项目名称...'" 
+                        class="form-control" style="background: rgba(37, 37, 38, 0.8); border: 2px solid #4A90E2; color: #fff; font-size: 16px; font-weight: bold; text-align: center; width: 300px; padding: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.5);" 
+                        @keyup.enter="$event.target.blur()">
+             </div>
+
+             <!-- 悬浮全局变量面板 -->
+             <div class="floating-panel" @mousedown.stop style="position: absolute; top: 20px; right: 20px; z-index: 100; background: #2d2d2d; border: 1px solid #444; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); display: flex; flex-direction: column;">
+                 <div class="panel-header" @click="variablesMinimized = !variablesMinimized" style="padding: 8px 12px; background: #3d3d3d; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border-radius: 6px 6px 0 0; user-select: none;">
+                     <span style="color: #4A90E2; font-size: 13px; font-weight: bold;">全局变量</span>
+                     <span style="font-size: 12px; color: #ccc; margin-left: 20px;">{{ variablesMinimized ? '➕' : '➖' }}</span>
+                 </div>
+                 <div class="panel-content" v-show="!variablesMinimized" style="padding: 10px; overflow: auto; resize: both; min-height: 60px; min-width: 180px; width: 220px; max-height: 60vh;">
+                     <div v-for="(v, vIdx) in variables" :key="vIdx" style="display: flex; gap: 5px; margin-bottom: 5px;">
+                         <input type="text" v-model="v.name" class="form-control" placeholder="变量名" style="font-size: 11px; flex: 1;" @keyup.enter="$event.target.blur()">
+                         <input type="text" v-model="v.value" class="form-control" placeholder="值" style="font-size: 11px; flex: 1;" @keyup.enter="$event.target.blur()">
+                         <button class="btn btn-danger btn-small" @click="variables.splice(vIdx, 1)" style="padding: 0 5px;" title="删除变量">❌</button>
+                     </div>
+                     <button class="btn btn-small" @click="variables.push({name: '', value: ''})" style="width: 100%; margin-top: 5px;">+ 添加变量</button>
+                 </div>
+             </div>
+
+              <svg width="100%" height="100%" v-bind="{ viewBox: viewBox }" style="position: absolute; top: 0; left: 0;">
+                <defs>
+                   <clipPath id="substrateClip">
+                       <rect v-if="processSteps.length > 0 && processSteps[0].patterns && processSteps[0].patterns.length > 0" 
+                             :x="-processSteps[0].patterns[0].w / 2" 
+                             y="-10000" 
+                             :width="processSteps[0].patterns[0].w" 
+                             height="20000" />
+                   </clipPath>
+                   <pattern id="smallGrid" width="10" height="10" patternUnits="userSpaceOnUse">
+                        <path d="M 10 0 L 0 0 0 10" fill="none" stroke="#e0e0e0" stroke-width="0.5" />
+                    </pattern>
+                    <pattern id="grid" width="100" height="100" patternUnits="userSpaceOnUse">
+                        <rect width="100" height="100" fill="url(#smallGrid)" />
+                        <path d="M 100 0 L 0 0 0 100" fill="none" stroke="#ccc" stroke-width="1" />
+                    </pattern>
+                    <pattern id="hatchPattern" width="10" height="10" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
+                        <rect width="10" height="10" fill="rgba(74, 144, 226, 0.4)" />
+                        <line x1="0" y1="0" x2="0" y2="10" stroke="#fff" stroke-width="2" />
+                    </pattern>
+                </defs>
+                
+                <rect width="400%" height="400%" x="-100%" y="-100%" fill="url(#grid)" />
+                <line x1="0" y1="-2000" x2="0" y2="2000" stroke="#ffcccc" stroke-width="1" stroke-dasharray="5,5" />
+                
+                <!-- 坐标轴刻度 -->
+                <g font-size="10" fill="#999" font-family="monospace">
+                    <text v-for="tag in axisElements" :key="tag.id" :x="tag.x" :y="tag.y" :text-anchor="tag.anchor" :dominant-baseline="tag.baseline">
+                        {{ tag.text }}
+                    </text>
+                </g>
+
+                <!-- 渲染路径 -->
+                <g clip-path="url(#substrateClip)">
+                    <path v-for="path in svgPaths" :key="'base-'+path.id" 
+                          :d="path.d" 
+                          :fill="path.fill" 
+                          style="cursor: pointer;"
+                          @mouseover="hoverLayerIndex = path.idx; hoverPatternIndex = path.pIdx"
+                          @mouseout="hoverLayerIndex = -1; hoverPatternIndex = -1; flashingPatternIndex = -1"
+                          @click.stop="onCanvasPatternClick(path.idx, path.pIdx)" />
+                          
+                    <!-- 渲染高亮层(叠在上面) -->
+                    <path v-for="path in svgPaths" :key="'high-'+path.id" 
+                          v-show="path.isHighlight"
+                          :d="path.d" 
+                          fill="url(#hatchPattern)" 
+                          class="flashing-path"
+                          style="pointer-events: none;" />
+                </g>
+             </svg>
+             
+             <!-- 缩放控件 -->
+             <div class="controls-overlay" @mousedown.stop>
+                 <span style="font-size: 12px; color: #ccc;">缩放: {{ currentZoom }}%</span>
+                 <input type="range" v-model.number="currentZoom" min="10" max="300" style="width: 100px;">
+                 <button class="btn btn-small" style="margin:0; background: #444;" @click="resetZoom">复原</button>
+             </div>
+        </div>
+    </div>
+
+    <!-- 逻辑脚本 -->
+    <script src="engine.js"></script>
+    <script src="store.js"></script>
+    <script src="history.js"></script>
+    <script src="canvas.js"></script>
+    <script src="components.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
