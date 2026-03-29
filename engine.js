@@ -18,12 +18,14 @@ window.calculateProfiles = function(steps) {
 
     const minX = subLeft - 100; // Restore buffer to allow viewbox rendering correctly
     const maxX = subRight + 100;
-    const gridWidth = maxX - minX + 1;
-    let profiles = [new Array(gridWidth).fill(0)]; 
+    // 将物理单位转化为高分辨率亚像素数组，解决陡峭角度精度问题。在此折中降低为 10（原来50），以解决实时拖动滑条的性能卡顿问题。
+    const GRID_RES = 10; 
+    const gridWidth = (maxX - minX) * GRID_RES + 1;
+    let profiles = [new Float32Array(gridWidth)]; 
 
     // 2. 遍历各工艺步骤步进行布尔或加法运算
     steps.forEach((step, idx) => {
-        let currentProfile = [...profiles[idx]];
+        let currentProfile = new Float32Array(profiles[idx]);
 
         if (!step.visible && step.visible !== undefined) {
              profiles.push(currentProfile);
@@ -31,12 +33,11 @@ window.calculateProfiles = function(steps) {
         }
 
         const type = step.type || 'deposit';
-        let mask = new Array(gridWidth).fill(0);
-        let taperHalf = 0;
+        let mask = new Float32Array(gridWidth);
         
         if (type === 'deposit' || type === 'etch') {
             const rad = (step.angle || 90) * Math.PI / 180;
-            // deltaX 等于厚度带来的侧壁展曲斜率 (水平增量)
+            // deltaX 等于厚度带来的侧壁展曲斜率 (水平增量, 原始物理尺寸)
             let deltaX = step.angle < 90 && step.thickness > 0 ? step.thickness / Math.tan(rad) : 0;
 
             // 3. 计算图案覆盖掩膜 (Mask), 带有侧壁斜度映射
@@ -47,24 +48,28 @@ window.calculateProfiles = function(steps) {
                 // Move coordinate onto grid
                 let cx = px - minX;
 
+                // 物理坐标对应的掩膜边缘
                 let X0 = cx - pw / 2 - deltaX / 2; // Outer left footprint
                 let X1 = cx - pw / 2 + deltaX / 2; // Inner left top
                 let X2 = cx + pw / 2 - deltaX / 2; // Inner right top
                 let X3 = cx + pw / 2 + deltaX / 2; // Outer right footprint
 
-                let iStart = Math.max(0, Math.floor(X0));
-                let iEnd = Math.min(gridWidth - 1, Math.ceil(X3));
+                // 映射成 GRID_RES 索引空间下的索引
+                let iStart = Math.max(0, Math.floor(X0 * GRID_RES));
+                let iEnd = Math.min(gridWidth - 1, Math.ceil(X3 * GRID_RES));
 
                 for (let i = iStart; i <= iEnd; i++) {
                     let m = 1;
                     if (deltaX > 0) {
-                        let mL = (i - X0) / deltaX;
-                        let mR = (X3 - i) / deltaX;
+                        let physicalI = i / GRID_RES;
+                        let mL = (physicalI - X0) / deltaX;
+                        let mR = (X3 - physicalI) / deltaX;
                         m = Math.max(0, Math.min(1, mL, mR));
                     } else {
-                        if (i < cx - pw / 2 || i > cx + pw / 2) m = 0;
+                        let physicalI = i / GRID_RES;
+                        if (physicalI < cx - pw / 2 || physicalI > cx + pw / 2) m = 0;
                     }
-                    mask[i] = Math.max(mask[i], m);
+                    if (m > mask[i]) mask[i] = m;
                 }
             });
 
@@ -84,12 +89,15 @@ window.calculateProfiles = function(steps) {
             }
         } else if (type === 'cmp') {
             // 5. CMP抛光：依据最高点削平指定的厚度
-            let stepMaxH = Math.max(...currentProfile);
+            let stepMaxH = 0;
+            for(let i=0; i<gridWidth; i++){
+                if(currentProfile[i] > stepMaxH) stepMaxH = currentProfile[i];
+            }
             let targetPlane = Math.max(0, stepMaxH - step.thickness);
             for (let i = 0; i < gridWidth; i++) {
-                currentProfile[i] = Math.min(currentProfile[i], targetPlane);
+                if (currentProfile[i] > targetPlane) currentProfile[i] = targetPlane;
                 for(let depthIdx = idx; depthIdx >= 0; depthIdx--) {
-                    profiles[depthIdx][i] = Math.min(profiles[depthIdx][i], targetPlane);
+                    if (profiles[depthIdx][i] > targetPlane) profiles[depthIdx][i] = targetPlane;
                 }
             }
         }
@@ -98,7 +106,13 @@ window.calculateProfiles = function(steps) {
     });
 
     let globalMaxH = 0;
-    profiles.forEach(p => globalMaxH = Math.max(globalMaxH, ...p));
+    profiles.forEach(p => {
+        let maxOfP = 0;
+        for(let i=0; i<gridWidth; i++) {
+            if(p[i] > maxOfP) maxOfP = p[i];
+        }
+        if(maxOfP > globalMaxH) globalMaxH = maxOfP;
+    });
 
     return {
         profiles: profiles,
@@ -107,6 +121,7 @@ window.calculateProfiles = function(steps) {
         gridWidth: gridWidth,
         subLeft: subLeft,
         subRight: subRight,
-        maxH: globalMaxH
+        maxH: globalMaxH,
+        GRID_RES: GRID_RES
     };
 };

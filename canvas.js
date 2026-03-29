@@ -121,12 +121,13 @@ function useCanvas(engineResult, triggerResize, processSteps, activeLayerIndex, 
     // 5. 核心渲染路径：SVG Path 生成
     // 将 engine.js 计算出的高度场 (profiles) 转换为可以带填充色的多边形
     // =========================================
-    const svgPaths = computed(() => {
+    const basePathData = computed(() => {
         let paths = [];
         if (!engineResult.value || !engineResult.value.profiles) return paths;
         let profiles = engineResult.value.profiles;
         let minX = engineResult.value.minX;
         let gridWidth = engineResult.value.gridWidth;
+        let GRID_RES = engineResult.value.GRID_RES || 1;
         let subL = engineResult.value.subLeft !== undefined ? engineResult.value.subLeft : -2000;
         let subR = engineResult.value.subRight !== undefined ? engineResult.value.subRight : 2000;
 
@@ -145,44 +146,87 @@ function useCanvas(engineResult, triggerResize, processSteps, activeLayerIndex, 
             if (!step.patterns) return;
             step.patterns.forEach((p, pIdx) => {
                 let pStartX = minX;
-                let pEndX = minX + gridWidth - 1;
+                let pEndX = minX + (gridWidth - 1) / GRID_RES;
                 
                 if (idx !== 0 && (!step.name || !step.name.includes('ILD'))) {
                     pStartX = Math.max(subL, Math.floor(p.x - p.w/2 - taperHalf - 5));
                     pEndX = Math.min(subR, Math.ceil(p.x + p.w/2 + taperHalf + 5));
                 }
 
-                let d = [];
-                for (let x = pStartX; x <= pEndX; x++) {
-                    let i = x - minX;
-                    if (i < 0 || i >= gridWidth) continue;
+                // 计算物理坐标映射到分辨率网格数组的起始下标
+                let iStart = Math.max(0, Math.floor((pStartX - minX) * GRID_RES));
+                let iEnd = Math.min(gridWidth - 1, Math.ceil((pEndX - minX) * GRID_RES));
+
+                let topPoints = [];
+                for (let i = iStart; i <= iEnd; i++) {
+                    let x = minX + i / GRID_RES;
                     let y = topProf[i];
                     for (let n = idx + 2; n < profiles.length; n++) {
                         y = Math.min(y, profiles[n][i]);
                     }
-                    d.push(`${d.length === 0 ? 'M' : 'L'} ${x} ${500 - y}`);
+                    let vy = 500 - y;
+                    
+                    if (topPoints.length >= 2) {
+                        let p1 = topPoints[topPoints.length - 1];
+                        let p0 = topPoints[topPoints.length - 2];
+                        if (Math.abs((p1.x - p0.x) * (vy - p1.y) - (x - p1.x) * (p1.y - p0.y)) <= 1e-3) {
+                            topPoints[topPoints.length - 1] = {x, y: vy};
+                            continue;
+                        }
+                    }
+                    topPoints.push({x, y: vy});
                 }
 
-                for (let x = pEndX; x >= pStartX; x--) {
-                    let i = x - minX;
-                    if (i < 0 || i >= gridWidth) continue;
+                let bottomPoints = [];
+                for (let i = iEnd; i >= iStart; i--) {
+                    let x = minX + i / GRID_RES;
                     let y = bottomProf[i];
                     for (let n = idx + 1; n < profiles.length; n++) {
                         y = Math.min(y, profiles[n][i]);
                     }
-                    d.push(`L ${x} ${500 - y}`);
+                    let vy = 500 - y;
+                    
+                    if (bottomPoints.length >= 2) {
+                        let p1 = bottomPoints[bottomPoints.length - 1];
+                        let p0 = bottomPoints[bottomPoints.length - 2];
+                        if (Math.abs((p1.x - p0.x) * (vy - p1.y) - (x - p1.x) * (p1.y - p0.y)) <= 1e-3) {
+                            bottomPoints[bottomPoints.length - 1] = {x, y: vy};
+                            continue;
+                        }
+                    }
+                    bottomPoints.push({x, y: vy});
                 }
-                d.push('Z');
-                if (d.length === 1) return;
 
-                const isHighlit = (idx === hoverLayerIndex.value && pIdx === hoverPatternIndex.value) || 
-                                  (idx === activeLayerIndex.value && pIdx === focusedPatternIndex.value) || 
-                                  (idx === activeLayerIndex.value && pIdx === hoverCardPatternIndex.value);
-                paths.push({ id: step.id + '-' + pIdx, d: d.join(' '), fill: step.color, idx: idx, pIdx: pIdx, isHighlight: isHighlit });
+                let d = [];
+                topPoints.forEach((pt, ti) => { d.push(`${ti === 0 ? 'M' : 'L'} ${pt.x} ${pt.y}`); });
+                bottomPoints.forEach(pt => { d.push(`L ${pt.x} ${pt.y}`); });
+                d.push('Z');
+                
+                if (d.length <= 2) return;
+
+                paths.push({ id: step.id + '-' + pIdx, d: d.join(' '), fill: step.color, idx: idx, pIdx: pIdx });
             });
         });
 
         return paths;
+    });
+
+    // 分离高亮状态计算，防止由于鼠标移动引起的数万次坐标重运算卡顿
+    const svgPaths = computed(() => {
+        if (!basePathData.value) return [];
+        return basePathData.value.map(p => {
+            const isHighlit = (p.idx === hoverLayerIndex.value && p.pIdx === hoverPatternIndex.value) ||
+                              (p.idx === activeLayerIndex.value && p.pIdx === focusedPatternIndex.value) ||
+                              (p.idx === activeLayerIndex.value && p.pIdx === hoverCardPatternIndex.value);
+            return {
+                id: p.id,
+                d: p.d,
+                fill: p.fill,
+                idx: p.idx,
+                pIdx: p.pIdx,
+                isHighlight: isHighlit
+            };
+        });
     });
 
     const handleKeyDown = (e) => {
