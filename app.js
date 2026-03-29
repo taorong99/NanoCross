@@ -139,60 +139,84 @@ const App = {
         };
 
         const loadFile = async () => {
+            let useLocal = false;
             try {
-                // 1. 从服务器获取可选的项目列表
+                // 试图从服务器获取可选的项目列表
                 const res = await fetch('/api/designs');
-                if (!res.ok) throw new Error('无法连接到服务器以获取项目列表');
-                
-                const projects = await res.json();
-                if (projects.length === 0) {
-                    alert('服务器上还没有保存任何项目。');
-                    return;
-                }
-
-                // 2. 弹窗让用户输入要加载的项目名（并提示可用的列表）
-                const listText = projects.join('\n- ');
-                const inputName = prompt(`请输入要加载的项目名称 (不带.json):\n\n当前服务器包含以下项目:\n- ${listText}`);
-                
-                if (!inputName) return; // 用户取消
-
-                // 3. 将所选项目向服务器请求加载
-                const loadRes = await fetch(`/api/load/${encodeURIComponent(inputName)}`);
-                if (!loadRes.ok) throw new Error(`项目 "${inputName}" 不存在或读取失败`);
-                
-                const data = await loadRes.json();
-                
-                // 4. 应用数据到当前界面
-                if (data.projectName) {
-                    store.projectName.value = data.projectName;
-                }
-                if (data.variables && Array.isArray(data.variables)) {
-                    store.variables.value = data.variables;
-                }
-                if (data.processSteps && Array.isArray(data.processSteps)) {
-                    store.processSteps.value = data.processSteps;
-                    store.activeLayerIndex.value = Math.max(0, data.processSteps.length - 1);
-                    if (history && history.pushHistory) {
-                        setTimeout(history.pushHistory, 100);
-                    }
+                if (!res.ok) {
+                    useLocal = true;
                 } else {
-                    alert('获取到的文件格式无效（缺少 processSteps 数据）');
+                    const projects = await res.json();
+                    if (projects.length === 0) {
+                        alert('服务器上还没有保存任何项目。');
+                        return;
+                    }
+                    
+                    const listText = projects.join('\n- ');
+                    const inputName = prompt(`请输入要加载的项目名称 (不带.json):\n\n当前服务器包含以下项目:\n- ${listText}`);
+                    if (!inputName) return; 
+
+                    const loadRes = await fetch(`/api/load/${encodeURIComponent(inputName)}`);
+                    if (!loadRes.ok) throw new Error(`项目 "${inputName}" 不存在或读取失败`);
+                    
+                    const data = await loadRes.json();
+                    applyData(data);
                 }
             } catch (err) {
-                alert('加载出错: ' + err.message + '\n请确认您当前正在通过后端环境(Node)访问该页面，而非直接双击打开本地 HTML。');
+                useLocal = true;
+            }
+
+            if (useLocal) {
+                alert('未检测到后端环境连接。\n即将切换至【本地文件读取模式】加载文件...');
+                // 兜底方案：本地文件选择加载
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = '.json';
+                input.onchange = (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (re) => {
+                        try {
+                            const data = JSON.parse(re.target.result);
+                            applyData(data);
+                        } catch (err) {
+                            alert('无效的 JSON 文件格式');
+                        }
+                    };
+                    reader.readAsText(file);
+                };
+                input.click();
+            }
+        };
+
+        const applyData = (data) => {
+            if (data.projectName) {
+                store.projectName.value = data.projectName;
+            }
+            if (data.variables && Array.isArray(data.variables)) {
+                store.variables.value = data.variables;
+            }
+            if (data.processSteps && Array.isArray(data.processSteps)) {
+                store.processSteps.value = data.processSteps;
+                store.activeLayerIndex.value = Math.max(0, data.processSteps.length - 1);
+                if (history && history.pushHistory) {
+                    setTimeout(history.pushHistory, 100);
+                }
+            } else {
+                alert('获取到的文件格式无效（缺少 processSteps 数据）');
             }
         };
 
         const saveFile = async () => {
-            // 如果不存在项目名称，则要求用户必须输入
             let nameToSave = store.projectName.value;
             if (!nameToSave || nameToSave.trim() === '') {
-                const name = prompt("请输入将存入服务器的项目名称：");
+                const name = prompt("请输入项目名称：");
                 if (name && name.trim() !== '') {
                     nameToSave = name.trim();
                     store.projectName.value = nameToSave;
                 } else {
-                    return; // 取消保存
+                    return; 
                 }
             }
             
@@ -202,7 +226,7 @@ const App = {
                 processSteps: store.processSteps.value
             };
 
-            // 直接通过 HTTP API 推送到服务器
+            let useLocal = false;
             try {
                 const response = await fetch('/api/save', {
                     method: 'POST',
@@ -213,11 +237,22 @@ const App = {
                 if (response.ok) {
                     alert(`保存成功！数据已后台写入 /designs/${nameToSave}.json`);
                 } else {
-                    const errMsg = await response.text();
-                    throw new Error(errMsg);
+                    useLocal = true;
                 }
             } catch (err) {
-                alert('后台保存失败: ' + err.message + '\n请确认您当前正在通过后端环境(Node)访问该页面，而非直接双击打开本地 HTML。');
+                useLocal = true;
+            }
+
+            if (useLocal) {
+                alert('未检测到后端环境连接。\n即将切换至【浏览器下载模式】保存当前设计...');
+                // 兜底方案：通过浏览器下载 JSON 文件到本地
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(saveData, null, 4));
+                const downloadAnchorNode = document.createElement('a');
+                downloadAnchorNode.setAttribute("href", dataStr);
+                downloadAnchorNode.setAttribute("download", `${nameToSave}.json`);
+                document.body.appendChild(downloadAnchorNode); 
+                downloadAnchorNode.click();
+                downloadAnchorNode.remove();
             }
         };
 
