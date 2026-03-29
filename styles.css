@@ -179,3 +179,75 @@ body {
     min-width: 60px;
     box-shadow: 0 2px 6px rgba(0,0,0,0.3);
 }
+
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+}
+
+.modal-content {
+    background: #252526;
+    border: 1px solid #3d3d3d;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    max-width: 55vw;
+    max-height: 75vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+}
+
+.modal-content h3 {
+    margin: 0;
+    color: #e0e0e0;
+}
+
+.preview-container {
+    width: 100%;
+    max-height: 55vh;
+    overflow: auto;
+    background: #ffffff; /* 用于衬托 PNG 图像的纯白底色 */
+    border: 1px dashed #666;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 10px;
+}
+
+.preview-img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 15px;
+    justify-content: flex-end;
+    width: 100%;
+}
+
+.modal-actions .btn {
+    width: auto;
+    margin-bottom: 0;
+    padding: 8px 24px;
+    min-width: 80px;
+}
+
+.btn-secondary {
+    background: #555;
+    color: #fff;
+}
+.btn-secondary:hover {
+    background: #666;
+}

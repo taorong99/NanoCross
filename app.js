@@ -9,6 +9,11 @@ const App = {
         
         // UI 交互状态
         const variablesMinimized = ref(false);
+        const showExportMenu = ref(false);
+        const showPreviewModal = ref(false);
+        const previewImageUrl = ref('');
+        const previewFileName = ref('');
+        const mainSvgRef = ref(null);
         const hoverLayerIndex = ref(-1);
         const hoverPatternIndex = ref(-1);
         const focusedPatternIndex = ref(-1);
@@ -120,9 +125,9 @@ const App = {
         };
 
         // 拖拽步骤排序
-        const onDragStart = (e, index) => { 
-            if (index === 0) return; 
-            e.dataTransfer.setData('stepIndex', index); 
+        const onDragStart = (e, index) => {
+            if (index === 0) return;
+            e.dataTransfer.setData('stepIndex', index);
         };
         const onDrop = (e, index) => {
             if (index === 0) return;
@@ -134,8 +139,112 @@ const App = {
         };
 
         // 文件导入导出
-        const exportFile = () => {
-            alert('导出功能预留：未来可支持导出其他格式。');
+        const exportFile = (format) => {
+            if (!mainSvgRef.value) return;
+
+            // 1. 克隆 SVG 节点并预处理
+            const clonedSvg = mainSvgRef.value.cloneNode(true);
+            
+            // 2. 清理不需要导出的元素 (背景网格、坐标轴、高亮框等)
+            const ignores = clonedSvg.querySelectorAll('.export-ignore, .flashing-path');
+            ignores.forEach(el => el.remove());
+
+            // 3. 移除可能影响外部显示的内联样式，并动态剪裁 viewBox 以去除不必要的留白
+            clonedSvg.style.position = '';
+            clonedSvg.style.top = '';
+            clonedSvg.style.left = '';
+            clonedSvg.removeAttribute('width');
+            clonedSvg.removeAttribute('height');
+
+            // 提取物理引擎里图形的真实宽度和高度范围
+            let resObj = store.engineResult.value;
+            if (resObj && typeof resObj.subLeft === 'number') {
+                const margin = 20; // 留一点边距
+                const tightX = resObj.subLeft - margin;
+                const tightWidth = (resObj.subRight - resObj.subLeft) + margin * 2;
+                
+                // maxH 是向上沉积的最大高度，0是基底表面。考虑到基底往下可能有一些刻蚀，稍微多取一些Y范围
+                // Y轴坐标由于屏幕是向下的，物理Y 0对应的SVG Y是 500。
+                const trueMaxH = resObj.fullMaxH !== undefined ? resObj.fullMaxH : resObj.maxH;
+                const tightY = 500 - trueMaxH - margin;
+                const tightHeight = trueMaxH + margin * 2 + 50; // 加 50 余量容纳向下的刻蚀或基底部分
+
+                clonedSvg.setAttribute('viewBox', `${tightX} ${tightY} ${tightWidth} ${tightHeight}`);
+            }
+
+            // 4. 将 SVG 序列化为字符串
+            const serializer = new XMLSerializer();
+            let svgString = serializer.serializeToString(clonedSvg);
+            
+            // 修复可能缺少的 xmlns 声明 (虽然已经在 index.html 加了，但也防万一)
+            if (!svgString.includes('xmlns="http://www.w3.org/2000/svg"')) {
+                svgString = svgString.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" ');
+            }
+
+            const fileName = (store.projectName.value || 'NanoCross_Project') + '-export';
+
+            if (format === 'svg') {
+                const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${fileName}.svg`;
+                a.click();
+                URL.revokeObjectURL(url);
+            } 
+            else if (format === 'png') {
+                // 5. 利用 canvas 将 SVG 转 PNG，并拦截下载由前端弹窗提供预览
+                const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+                const url = URL.createObjectURL(svgBlob);
+                
+                const img = new Image();
+                img.onload = () => {
+                    // 获取当前 viewBox 的尺寸比例
+                    const viewBox = clonedSvg.getAttribute('viewBox');
+                    let targetW = 1920; 
+                    let targetH = 1080;
+                    if (viewBox) {
+                        const [, , vbW, vbH] = viewBox.split(' ').map(Number);
+                        if (vbW && vbH) {
+                            targetH = (vbH / vbW) * targetW; 
+                        }
+                    }
+
+                    const canvas = document.createElement('canvas');
+                    canvas.width = targetW;
+                    canvas.height = targetH;
+                    const ctx = canvas.getContext('2d');
+                    
+                    // 填充纯白色背景
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, targetW, targetH);
+                    
+                    // 将 SVG 绘制到白色背景上
+                    ctx.drawImage(img, 0, 0, targetW, targetH);
+                    
+                    const pngUrl = canvas.toDataURL('image/png');
+                    previewImageUrl.value = pngUrl;
+                    previewFileName.value = `${fileName}.png`;
+                    showPreviewModal.value = true;
+                    
+                    URL.revokeObjectURL(url);
+                };
+                img.src = url;
+            }
+        };
+
+        const confirmDownloadPng = () => {
+            if (!previewImageUrl.value) return;
+            const a = document.createElement('a');
+            a.href = previewImageUrl.value;
+            a.download = previewFileName.value;
+            a.click();
+            showPreviewModal.value = false;
+        };
+
+        const cancelDownloadPng = () => {
+            showPreviewModal.value = false;
+            previewImageUrl.value = '';
         };
 
         const loadFile = async () => {
@@ -264,6 +373,12 @@ const App = {
             loadFile,
             saveFile,
             exportFile,
+            showExportMenu,
+            showPreviewModal,
+            previewImageUrl,
+            confirmDownloadPng,
+            cancelDownloadPng,
+            mainSvgRef,
             undo: history.undo,
             redo: history.redo,
             canUndo: history.canUndo,

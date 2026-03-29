@@ -143,10 +143,18 @@
              <div style="position: absolute; top: 20px; left: 20px; z-index: 100; display: flex; flex-direction: column; gap: 8px;">
                  <button class="btn btn-small floating-btn" @click.stop="loadFile">加载</button>
                  <button class="btn btn-small floating-btn" @click.stop="saveFile">保存</button>
-                 <button class="btn btn-small floating-btn" @click.stop="exportFile">导出</button>
-             </div>
+                   <div style="position: relative;" @mouseleave="showExportMenu = false">
+                       <button class="btn btn-small floating-btn" style="width: 100%; margin: 0;" @mouseenter="showExportMenu = true" @click.stop="showExportMenu = !showExportMenu">导出▾</button>
+                       <div v-show="showExportMenu" style="position: absolute; top: 100%; left: 0; z-index: 200; padding-top: 4px; min-width: 80px; width: 100%;">
+                           <div style="background: #333; border: 1px solid #555; border-radius: 4px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 2px 8px rgba(0,0,0,0.5);">
+                               <button class="btn" style="margin: 0; border: none; border-radius: 0; text-align: left; background: transparent; color: #eee; width: 100%; padding: 6px 10px;" @click.stop="exportFile('png'); showExportMenu = false">PNG</button>
+                               <button class="btn" style="margin: 0; border: none; border-radius: 0; text-align: left; background: transparent; color: #eee; width: 100%; padding: 6px 10px; border-top: 1px solid #444;" @click.stop="exportFile('svg'); showExportMenu = false">SVG</button>
+                           </div>
+                       </div>
+                   </div>
+               </div>
 
-             <!-- 画布居中上方的项目名称 -->
+               <!-- 画布居中上方的项目名称 -->
              <div style="position: absolute; top: 20px; left: 50%; transform: translateX(-50%); z-index: 100; text-align: center;" @mousedown.stop>
                  <input type="text" v-model="projectName" :placeholder="'输入项目名称...'" 
                         class="form-control" style="background: rgba(37, 37, 38, 0.8); border: 2px solid #4A90E2; color: #fff; font-size: 16px; font-weight: bold; text-align: center; width: 300px; padding: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.5);" 
@@ -169,7 +177,7 @@
                  </div>
              </div>
 
-              <svg width="100%" height="100%" v-bind="{ viewBox: viewBox }" style="position: absolute; top: 0; left: 0;">
+              <svg ref="mainSvgRef" class="main-svg" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" v-bind="{ viewBox: viewBox }" style="position: absolute; top: 0; left: 0;">
                 <defs>
                    <clipPath id="substrateClip">
                        <rect v-if="processSteps.length > 0 && processSteps[0].patterns && processSteps[0].patterns.length > 0" 
@@ -191,11 +199,11 @@
                     </pattern>
                 </defs>
                 
-                <rect width="400%" height="400%" x="-100%" y="-100%" fill="url(#grid)" />
-                <line x1="0" y1="-2000" x2="0" y2="2000" stroke="#ffcccc" stroke-width="1" stroke-dasharray="5,5" />
-                
+                <rect class="export-ignore" width="400%" height="400%" x="-100%" y="-100%" fill="url(#grid)" />
+                <line class="export-ignore" x1="0" y1="-2000" x2="0" y2="2000" stroke="#ffcccc" stroke-width="1" stroke-dasharray="5,5" />
+
                 <!-- 坐标轴刻度 -->
-                <g font-size="10" fill="#999" font-family="monospace">
+                <g class="export-ignore" font-size="10" fill="#999" font-family="monospace">
                     <text v-for="tag in axisElements" :key="tag.id" :x="tag.x" :y="tag.y" :text-anchor="tag.anchor" :dominant-baseline="tag.baseline">
                         {{ tag.text }}
                     </text>
@@ -227,6 +235,21 @@
                  <input type="range" v-model.number="currentZoom" min="10" max="300" style="width: 100px;">
                  <button class="btn btn-small" style="margin:0; background: #444;" @click="resetZoom">复原</button>
              </div>
+
+             <!-- PNG 导出预览模态框 -->
+             <div v-if="showPreviewModal" class="modal-overlay">
+                 <div class="modal-content">
+                     <h3>PNG 导出预览</h3>
+                     <div class="preview-container">
+                         <img :src="previewImageUrl" alt="PNG Preview" class="preview-img" />
+                     </div>
+                     <div class="modal-actions">
+                         <button class="btn btn-secondary" @click="cancelDownloadPng">取消</button>
+                         <button class="btn btn-primary" @click="confirmDownloadPng">下载</button>
+                     </div>
+                 </div>
+             </div>
+
         </div>
     </div>
 
