@@ -58,6 +58,9 @@ function useStore() {
         });
     };
 
+    // 导出一个计算属性形式的解析后数据，供画布和视图等依赖响应式自动更新
+    const parsedSteps = computed(() => getParsedSteps());
+
     // =========================================
     // 3. 用户行为方法 - 工艺与图案的增删改
     // =========================================
@@ -126,6 +129,7 @@ function useStore() {
         activeStep,
         engineResult,
         getParsedSteps,
+        parsedSteps,
         addPattern,
         removePattern,
         addStep,

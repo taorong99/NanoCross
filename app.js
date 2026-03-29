@@ -25,7 +25,7 @@ const App = {
         const canvasProps = useCanvas(
             store.engineResult, 
             triggerResize, 
-            store.processSteps, 
+            store.parsedSteps, // 使用解析变量后的步骤，避免画布获取到 undefined 坐标
             store.activeLayerIndex, 
             hoverLayerIndex, 
             hoverPatternIndex, 
