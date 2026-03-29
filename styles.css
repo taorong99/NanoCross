@@ -71,7 +71,7 @@ body {
    工艺层次列表项 (Layer Item)
    ========================================= */
 .layer-item {
-    padding: 10px 15px;
+    padding: 10px 10px 10px 5px;
     border-bottom: 1px solid #3d3d3d;
     cursor: pointer;
     display: flex;

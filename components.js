@@ -99,10 +99,16 @@ function registerComponents(app) {
                  @mouseout="$emit('mouseout', $event)"
                  @dragstart="$emit('dragstart', $event)"
                  @drop="$emit('drop', $event)">
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <span style="color: #666; font-size: 14px;">{{ index }}</span>
-                    <div :style="{ width: '12px', height: '12px', background: (step.type === 'etch' || step.type === 'cmp') ? '#ffffff' : step.color, borderRadius: '2px', border: '1px solid #555' }"></div>
-                    <span style="font-size: 15px;">{{ step.name }}</span>
+                <div style="display: flex; align-items: stretch; gap: 8px;">
+                    <span style="color: #e1e1e1; font-size: 14px; width: 14px; text-align: right; flex-shrink: 0; display: flex; align-items: center; justify-content: flex-end;">{{ index }}</span>
+                    <div :style="{ width: '12px', flexShrink: 0, background: (step.type === 'etch' || step.type === 'cmp') ? '#ffffff' : step.color, borderRadius: '2px', border: '1px solid #555' }"></div>
+                    <div style="display: flex; flex-direction: column; justify-content: center; min-width: 0; padding: 2px 0;">
+                        <span style="font-size: 15px; line-height: 1.2;">{{ step.name }}</span>
+                        <span style="font-size: 11px; color: #999; line-height: 1.2; margin-top: 4px;">
+                            {{ index === 0 ? '厚度' : (step.type === 'cmp' ? '抛光' : (step.type === 'etch' ? '深度' : '厚度')) }}: {{ step.thickness }}
+                            <template v-if="step.type !== 'cmp' && index !== 0">&nbsp;|&nbsp;倾角: {{ step.angle }}°</template>
+                        </span>
+                    </div>
                 </div>
                 
                 <div style="display: flex; gap: 8px;">
