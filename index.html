@@ -38,30 +38,18 @@
                 <h3 style="margin: 0; color: #fff;">工艺步骤</h3>
             </div>
             <div class="layer-list" style="flex-grow: 1; overflow-y: auto;">
-                <div v-for="(step, index) in processSteps" :key="step.id" 
-                     class="layer-item" 
-                     :class="{ active: index === activeLayerIndex }"
+                <layer-list-item v-for="(step, index) in processSteps" :key="step.id"
+                     :step="step" :index="index" :is-active="index === activeLayerIndex"
                      @click="activeLayerIndex = index"
                      @mouseover="hoverLayerIndex = index"
                      @mouseout="hoverLayerIndex = -1"
                      draggable="true" 
                      @dragstart="onDragStart($event, index)"
                      @dragover.prevent 
-                     @drop="onDrop($event, index)">
-                    
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <span style="color: #666; font-size: 11px;">{{ index }}</span>
-                        <div :style="{ width: '12px', height: '12px', background: (step.type === 'etch' || step.type === 'cmp') ? '#ffffff' : step.color, borderRadius: '2px', border: '1px solid #555' }"></div>
-                        <span style="font-size: 13px;">{{ step.name }}</span>
-                    </div>
-                    
-                    <div style="display: flex; gap: 8px;">
-                        <span class="layer-visibility" @click.stop="step.visible ? processSteps.forEach((s, idx) => { if(idx >= index) s.visible = false; }) : processSteps.forEach(s => s.visible = true)" :title="step.visible ? '隐藏当前及之后工艺' : '取消隐藏'">
-                            {{ step.visible ? '👁️' : '🚫' }}
-                        </span>
-                        <span @click.stop="deleteStep(index)" style="color: #ff4757; font-size: 14px; cursor: pointer;" title="删除此步工艺">❌</span>
-                    </div>
-                </div>
+                     @drop="onDrop($event, index)"
+                     @toggle-visibility="toggleVisibility(index)"
+                     @delete-step="deleteStep(index)">
+                </layer-list-item>
             </div>
             <div style="padding: 10px; border-top: 1px solid #3d3d3d; display: flex; gap: 5px; flex-wrap: wrap;">
                 <button class="btn btn-small" @click="addStep('deposit')">+ 沉积</button>
@@ -107,26 +95,17 @@
                 <div class="form-group" style="display: flex; gap: 10px; align-items: flex-start;">
                     <div style="flex: 1; min-width: 0;">
                         <label>{{ activeLayerIndex === 0 ? '衬底厚度' : (activeStep.type === 'cmp' ? '抛光厚度' : (activeStep.type === 'etch' ? '刻蚀深度' : '沉积厚度')) }}</label>
-                        <div style="display: flex; gap: 5px; align-items: center; margin-top: 5px;">
-                            <input type="range" v-model.number="activeStep.thickness" min="0" max="200" style="flex: 1; min-width: 0;">
-                            <input type="number" v-model.number="activeStep.thickness" class="form-control" style="width: 50px; padding: 2px 4px;" @keyup.enter="$event.target.blur()">
-                        </div>
+                        <slider-input v-model="activeStep.thickness" :min="0" :max="200"></slider-input>
                     </div>
                     <div v-if="activeStep.type !== 'cmp' && activeLayerIndex !== 0" style="flex: 1; min-width: 0;">
                         <label>侧壁角度 (°)</label>
-                        <div style="display: flex; gap: 5px; align-items: center; margin-top: 5px;">
-                            <input type="range" v-model.number="activeStep.angle" min="30" max="90" style="flex: 1; min-width: 0;">
-                            <input type="number" v-model.number="activeStep.angle" class="form-control" style="width: 50px; padding: 2px 4px;" @keyup.enter="$event.target.blur()">
-                        </div>
+                        <slider-input v-model="activeStep.angle" :min="30" :max="90"></slider-input>
                     </div>
                 </div>
 
                 <div v-if="activeLayerIndex === 0 && activeStep.patterns && activeStep.patterns[0]" class="form-group">
                     <label>衬底宽度</label>
-                    <div style="display: flex; gap: 10px; align-items: center; margin-top: 5px;">
-                        <input type="range" v-model.number="activeStep.patterns[0].w" min="100" max="2000" style="flex-grow: 1;">
-                        <input type="number" v-model.number="activeStep.patterns[0].w" class="form-control" style="width: 60px;" @keyup.enter="$event.target.blur()">
-                    </div>
+                    <slider-input v-model="activeStep.patterns[0].w" :min="100" :max="2000"></slider-input>
                 </div>
 
                 <div v-if="activeStep.type !== 'cmp'" v-show="activeLayerIndex !== 0">
@@ -137,8 +116,8 @@
                          @mouseleave="hoverCardPatternIndex = -1"
                          @click.stop="focusedPatternIndex = pIdx; flashingPatternIndex = -1">
                         <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                            <span style="font-size: 12px; color: #fff;">图案 {{ pIdx + 1 }}</span>
-                            <span @click="removePattern(pIdx)" style="cursor: pointer; color: #ff4757; font-size: 12px;" title="删除图案">❌</span>
+                            <span style="font-size: 14px; color: #fff;">图案 {{ pIdx + 1 }}</span>
+                            <span @click="removePattern(pIdx)" style="cursor: pointer; color: #ff4757; font-size: 14px;" title="删除图案">❌</span>
                         </div>
                         <div style="display: flex; gap: 5px; width: 100%;">
                             <pattern-input v-model="pat.x" label="X坐标" :variables="variables" style="flex: 1; min-width: 0;"></pattern-input>
@@ -149,7 +128,7 @@
                 </div>
 
             </div>
-            <div v-else style="color: #666; font-size: 13px; text-align: center; margin-top: 50px;">
+            <div v-else style="color: #666; font-size: 15px; text-align: center; margin-top: 50px;">
                 请选择一个工艺步骤
             </div>
         </div>
@@ -162,9 +141,9 @@
              
              <!-- 左上角功能按钮 -->
              <div style="position: absolute; top: 20px; left: 20px; z-index: 100; display: flex; flex-direction: column; gap: 8px;">
-                 <button class="btn btn-small" style="margin-bottom: 0; min-width: 60px; box-shadow: 0 2px 6px rgba(0,0,0,0.3);" @click.stop="loadFile">加载</button>
-                 <button class="btn btn-small" style="margin-bottom: 0; min-width: 60px; box-shadow: 0 2px 6px rgba(0,0,0,0.3);" @click.stop="saveFile">保存</button>
-                 <button class="btn btn-small" style="margin-bottom: 0; min-width: 60px; box-shadow: 0 2px 6px rgba(0,0,0,0.3);" @click.stop="exportFile">导出</button>
+                 <button class="btn btn-small floating-btn" @click.stop="loadFile">加载</button>
+                 <button class="btn btn-small floating-btn" @click.stop="saveFile">保存</button>
+                 <button class="btn btn-small floating-btn" @click.stop="exportFile">导出</button>
              </div>
 
              <!-- 画布居中上方的项目名称 -->
@@ -177,13 +156,13 @@
              <!-- 悬浮全局变量面板 -->
              <div class="floating-panel" @mousedown.stop style="position: absolute; top: 20px; right: 20px; z-index: 100; background: #2d2d2d; border: 1px solid #444; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); display: flex; flex-direction: column;">
                  <div class="panel-header" @click="variablesMinimized = !variablesMinimized" style="padding: 8px 12px; background: #3d3d3d; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border-radius: 6px 6px 0 0; user-select: none;">
-                     <span style="color: #4A90E2; font-size: 13px; font-weight: bold;">全局变量</span>
-                     <span style="font-size: 12px; color: #ccc; margin-left: 20px;">{{ variablesMinimized ? '➕' : '➖' }}</span>
+                     <span style="color: #4A90E2; font-size: 15px; font-weight: bold;">全局变量</span>
+                     <span style="font-size: 14px; color: #ccc; margin-left: 20px;">{{ variablesMinimized ? '➕' : '➖' }}</span>
                  </div>
                  <div class="panel-content" v-show="!variablesMinimized" style="padding: 10px; overflow: auto; resize: both; min-height: 60px; min-width: 180px; width: 220px; max-height: 60vh;">
                      <div v-for="(v, vIdx) in variables" :key="vIdx" style="display: flex; gap: 5px; margin-bottom: 5px;">
-                         <input type="text" v-model="v.name" class="form-control" placeholder="变量名" style="font-size: 11px; flex: 1;" @keyup.enter="$event.target.blur()">
-                         <input type="text" v-model="v.value" class="form-control" placeholder="值" style="font-size: 11px; flex: 1;" @keyup.enter="$event.target.blur()">
+                         <input type="text" v-model="v.name" class="form-control" placeholder="变量名" style="font-size: 14px; flex: 1;" @keyup.enter="$event.target.blur()">
+                         <input type="text" v-model="v.value" class="form-control" placeholder="值" style="font-size: 14px; flex: 1;" @keyup.enter="$event.target.blur()">
                          <button class="btn btn-danger btn-small" @click="variables.splice(vIdx, 1)" style="padding: 0 5px;" title="删除变量">❌</button>
                      </div>
                      <button class="btn btn-small" @click="variables.push({name: '', value: ''})" style="width: 100%; margin-top: 5px;">+ 添加变量</button>
@@ -244,7 +223,7 @@
              
              <!-- 缩放控件 -->
              <div class="controls-overlay" @mousedown.stop>
-                 <span style="font-size: 12px; color: #ccc;">缩放: {{ currentZoom }}%</span>
+                 <span style="font-size: 14px; color: #ccc;">缩放: {{ currentZoom }}%</span>
                  <input type="range" v-model.number="currentZoom" min="10" max="300" style="width: 100px;">
                  <button class="btn btn-small" style="margin:0; background: #444;" @click="resetZoom">复原</button>
              </div>

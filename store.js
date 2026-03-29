@@ -99,6 +99,16 @@ function useStore() {
         activeLayerIndex.value = Math.max(0, activeLayerIndex.value - 1);
     };
 
+    const toggleVisibility = (idx) => {
+        const step = processSteps.value[idx];
+        if (!step) return;
+        if (step.visible) {
+            processSteps.value.forEach((s, i) => { if(i >= idx) s.visible = false; });
+        } else {
+            processSteps.value.forEach(s => s.visible = true);
+        }
+    };
+
     return {
         projectName,
         processSteps,
@@ -110,6 +120,7 @@ function useStore() {
         addPattern,
         removePattern,
         addStep,
-        deleteStep
+        deleteStep,
+        toggleVisibility
     };
 }
