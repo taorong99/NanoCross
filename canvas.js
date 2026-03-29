@@ -38,9 +38,13 @@ function useCanvas(engineResult, triggerResize, processSteps, activeLayerIndex, 
         const maxH = engineResult.value.fullMaxH !== undefined ? engineResult.value.fullMaxH : engineResult.value.maxH;
         const baseW = (engineResult.value.subRight - engineResult.value.subLeft) + 200;
         const baseH = maxH + 300;
+        
+        const maxRatio = Math.max(baseW / cw, baseH / ch);
+        const scale = maxRatio / (_zoom / 100);
+
         pan.value.x += dx * scale;
         pan.value.y += dy * scale;
-        
+
         lastMouse = { x: e.clientX, y: e.clientY };
     };
 
