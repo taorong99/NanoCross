@@ -3,11 +3,17 @@
 function useHistory(processSteps, variables) {
     const { ref } = Vue;
     
+    // =========================================
+    // 1. 历史栈及内部状态
+    // =========================================
     const historyStack = ref([]);
     const historyIndex = ref(-1);
     let isUndoing = false;
     let historyTimer = null;
 
+    // =========================================
+    // 2. 核心方法：入栈与延时防抖保存
+    // =========================================
     const pushHistory = () => {
         if (isUndoing) return;
 
@@ -24,6 +30,9 @@ function useHistory(processSteps, variables) {
         }, 1000); // 延迟1000ms，让连续修改（如滑块拖动）只保存最后一次
     };
 
+    // =========================================
+    // 3. 核心方法：撤销 (Undo)与 重做 (Redo)
+    // =========================================
     const undo = () => {
         if (historyIndex.value > 0) {
             clearTimeout(historyTimer);

@@ -3,11 +3,17 @@
 function useCanvas(engineResult, triggerResize, processSteps, activeLayerIndex, hoverLayerIndex, hoverPatternIndex, focusedPatternIndex, flashingPatternIndex, hoverCardPatternIndex) {
     const { ref, computed } = Vue;
 
+    // =========================================
+    // 1. 画布缩放与平移状态
+    // =========================================
     const currentZoom = ref(100);
     const pan = ref({ x: 0, y: 0 });
     let isPanning = false;
     let lastMouse = { x: 0, y: 0 };
 
+    // =========================================
+    // 2. 交互操作：鼠标平移处理
+    // =========================================
     const startPan = (e) => {
         isPanning = true;
         lastMouse = { x: e.clientX, y: e.clientY };
@@ -46,6 +52,9 @@ function useCanvas(engineResult, triggerResize, processSteps, activeLayerIndex, 
         pan.value.y = 0;
     };
 
+    // =========================================
+    // 3. 画布坐标轴元素计算
+    // =========================================
     // 绘制基于物理尺寸的坐标轴
     const axisElements = computed(() => {
         let elements = [];
@@ -72,6 +81,9 @@ function useCanvas(engineResult, triggerResize, processSteps, activeLayerIndex, 
         return elements;
     });
 
+    // =========================================
+    // 4. ViewBox 映射逻辑：将物理坐标轴缩放和平移绑定到 SVG 视口
+    // =========================================
     // 计算 SVG viewBox 物理坐标映射
     const viewBox = computed(() => {
         const _trig = triggerResize.value; // 用于强制更新的依赖
@@ -101,7 +113,10 @@ function useCanvas(engineResult, triggerResize, processSteps, activeLayerIndex, 
         return `${X} ${Y} ${VBW} ${VBH}`;
     });
 
-    
+    // =========================================
+    // 5. 核心渲染路径：SVG Path 生成
+    // 将 engine.js 计算出的高度场 (profiles) 转换为可以带填充色的多边形
+    // =========================================
     const svgPaths = computed(() => {
         let paths = [];
         if (!engineResult.value || !engineResult.value.profiles) return paths;

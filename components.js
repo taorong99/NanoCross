@@ -3,6 +3,10 @@
 function registerComponents(app) {
     const { ref, watch } = Vue;
 
+    // =========================================
+    // 组件 1: 变量与自定义数值复合输入框
+    // 支持下拉选择全局变量，或者手动输入纯数字的一体式控件
+    // =========================================
     app.component('pattern-input', {
         props: ['modelValue', 'label', 'variables'],
         emits: ['update:modelValue'],
@@ -62,6 +66,10 @@ function registerComponents(app) {
         `
     });
 
+    // =========================================
+    // 组件 2: 绑定数值的拖拽条与输入框同步组件
+    // 将 input[type=range] 和 input[type=number] 组合，方便调节参数
+    // =========================================
     app.component('slider-input', {
         props: ['modelValue', 'min', 'max'],
         emits: ['update:modelValue'],
@@ -77,6 +85,10 @@ function registerComponents(app) {
         `
     });
 
+    // =========================================
+    // 组件 3: 工艺层级列表元素组件
+    // 提供给左侧侧边栏使用的图层列表项，包含可见性切换、删除操作、拖拽与高亮事件透传
+    // =========================================
     app.component('layer-list-item', {
         props: ['step', 'index', 'isActive'],
         emits: ['toggle-visibility', 'delete-step', 'click', 'mouseover', 'mouseout', 'dragstart', 'drop'],

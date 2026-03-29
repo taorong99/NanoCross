@@ -3,6 +3,9 @@
 function useStore() {
     const { ref, computed } = Vue;
 
+    // =========================================
+    // 1. 核心状态与默认数据
+    // =========================================
     // 默认工艺步骤
     const processSteps = ref([
         { id: 1, name: 'Substrate', type: 'deposit', thickness: 40, angle: 90, color: '#bdc3c7', visible: true, patterns: [{ x: 0, w: 600 }] },
@@ -25,6 +28,9 @@ function useStore() {
 
     const engineResult = ref({ profiles: [], minX: 0, maxX: 0, subLeft: -400, subRight: 400, maxH: 300 });
 
+    // =========================================
+    // 2. 状态衍生：变量计算与表达式安全求值
+    // =========================================
     const safeEval = (expr, scope) => {
         if (typeof expr !== 'string') return expr || 0;
         if (!expr.trim()) return 0;
@@ -52,6 +58,9 @@ function useStore() {
         });
     };
 
+    // =========================================
+    // 3. 用户行为方法 - 工艺与图案的增删改
+    // =========================================
     const addPattern = () => {
         if (activeStep.value) {
             if (!activeStep.value.patterns) activeStep.value.patterns = [];
