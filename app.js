@@ -1,5 +1,5 @@
 // app.js - 核心应用入口：负责组装各个模块，并挂载 Vue 实例
-const { createApp, ref, watch, onMounted, onUnmounted } = Vue;
+const { createApp, ref, computed, watch, onMounted, onUnmounted } = Vue;
 
 const App = {
     setup() {
@@ -10,6 +10,40 @@ const App = {
         // UI 交互状态
         const variablesMinimized = ref(false);
         const showExportMenu = ref(false);
+        const showLegendSettingsModal = ref(false);
+        const legendModalPosition = ref({ left: '50px', top: '100px' });
+        
+        const openLegendSettings = () => {
+            // 每次打开设在视口中间偏上
+            const winWidth = window.innerWidth || document.documentElement.clientWidth || 1000;
+            legendModalPosition.value.left = Math.max(0, (winWidth - 500) / 2) + 'px';
+            legendModalPosition.value.top = '100px';
+            showLegendSettingsModal.value = true;
+        };
+
+        let dragInfo = { isDragging: false, startX: 0, startY: 0, initialLeft: 0, initialTop: 0 };
+        const startDragLegendSettings = (e) => {
+            dragInfo.isDragging = true;
+            dragInfo.startX = e.clientX;
+            dragInfo.startY = e.clientY;
+            dragInfo.initialLeft = parseInt(legendModalPosition.value.left) || 0;
+            dragInfo.initialTop = parseInt(legendModalPosition.value.top) || 0;
+            
+            document.addEventListener('mousemove', onDragLegendSettings);
+            document.addEventListener('mouseup', endDragLegendSettings);
+        };
+        const onDragLegendSettings = (e) => {
+            if (!dragInfo.isDragging) return;
+            const dx = e.clientX - dragInfo.startX;
+            const dy = e.clientY - dragInfo.startY;
+            legendModalPosition.value.left = (dragInfo.initialLeft + dx) + 'px';
+            legendModalPosition.value.top = (dragInfo.initialTop + dy) + 'px';
+        };
+        const endDragLegendSettings = () => {
+            dragInfo.isDragging = false;
+            document.removeEventListener('mousemove', onDragLegendSettings);
+            document.removeEventListener('mouseup', endDragLegendSettings);
+        };
         const showPreviewModal = ref(false);
         const previewImageUrl = ref('');
         const previewFileName = ref('');
@@ -25,6 +59,91 @@ const App = {
         const layersWidth = ref(250);
         const propsWidth = ref(300);
         let activeResizer = null;
+
+        const toggleLegendLayer = (id) => {
+            const arr = store.legendSettings.value.hiddenLegendIds;
+            const idx = arr.indexOf(id);
+            if (idx === -1) arr.push(id);
+            else arr.splice(idx, 1);
+        };
+
+        // 图例数据计算，该计算属性根据当前的引擎计算结果(位置)及图例设置动态生成图例元素的呈现位置参数
+        const legendData = computed(() => {
+            const result = store.engineResult.value;
+            const settings = store.legendSettings.value;
+            
+            let subL = result.subLeft !== undefined ? result.subLeft : -400;
+            let subR = result.subRight !== undefined ? result.subRight : 400;
+            
+            let totalWidth = subR - subL;
+            let startX = subL;
+            
+            if (settings.widthMode === 'custom') {
+                totalWidth = settings.customWidth || 800;
+                startX = (subL + subR) / 2 - totalWidth / 2; // 计算横向居中的起始坐标
+            }
+            
+            // 筛选有效的需要展示在图例的步骤信息：这里由于只需提取有颜色标识的可视觉块，需要过滤出衬底信息和各类“deposit(沉积)”步骤，
+            // 同时也需要滤除被用户在设置面板被手动取消勾选隐藏起来的图层 (hiddenLegendIds数组存在id则跳过该图层展示)
+            const items = store.processSteps.value.filter((s, idx) => 
+                (idx === 0 || s.type === 'deposit') && !settings.hiddenLegendIds.includes(s.id)
+            );
+            
+            // 从设置栈里获取用户参数配置
+            const marginTop = settings.marginTop !== undefined ? settings.marginTop : 40; 
+            const itemsPerRow = settings.itemsPerRow || 4; 
+            const iconSize = settings.iconSize || 20;
+            
+            const startY = 500 + marginTop;
+            const rowHeight = Math.max(40, iconSize + 10);
+            const fontSize = settings.fontSize || 14;
+            
+            let elements = [];
+            
+            if (settings.showLegend !== false) {
+                // 计算每个元素排列在页面中的确切位置 (x、y) 与文本
+                for (let i = 0; i < items.length; i++) {
+                    let item = items[i];
+                    let row = Math.floor(i / itemsPerRow);
+                    let col = i % itemsPerRow;
+                    
+                    // 以整行的宽度平分供每个元素格内居中使用
+                    const cellWidth = totalWidth / itemsPerRow;
+                    let currX = startX + col * cellWidth;
+                    let currY = startY + row * rowHeight;
+                    
+                    let text = '';
+                    if (settings.textSource === 'material') {
+                        text = item.material || 'Unnamed';
+                    } else {
+                        text = item.name || 'Unnamed';
+                    }
+                    
+                    elements.push({
+                        id: item.id,
+                        x: currX,
+                        y: currY,
+                        color: item.color,
+                        text: text
+                    });
+                }
+            }
+            
+            const totalRows = Math.ceil(items.length / itemsPerRow);
+            const contentHeight = settings.showLegend !== false ? totalRows * rowHeight : 20; // 即使隐藏图例，也保留 20 高度以展示右上角的设置齿轮
+            
+            // 返回包含所有单个图层块所需信息及边界框总体范围的属性集
+            return {
+                elements: elements,
+                boxX: startX,
+                boxY: startY - 10,
+                boxW: totalWidth,
+                boxH: contentHeight + 10,
+                iconX: startX + totalWidth - 25,
+                iconY: startY - 5,
+                fontSize: fontSize
+            };
+        });
 
         // 画布属性，将需要依赖的全局数据传入
         const canvasProps = useCanvas(
@@ -167,9 +286,15 @@ const App = {
                 // Y轴坐标由于屏幕是向下的，物理Y 0对应的SVG Y是 500。
                 const trueMaxH = resObj.fullMaxH !== undefined ? resObj.fullMaxH : resObj.maxH;
                 const tightY = 500 - trueMaxH - margin;
-                const tightHeight = trueMaxH + margin * 2 + 50; // 加 50 余量容纳向下的刻蚀或基底部分
+                
+                // 将 legendData 高度也计入导出 viewBox 中
+                const maxY = legendData.value ? legendData.value.boxY + legendData.value.boxH + margin : 500 + 50 + margin;
+                const tightHeight = Math.max(trueMaxH + margin * 2 + 50, maxY - tightY);
 
                 clonedSvg.setAttribute('viewBox', `${tightX} ${tightY} ${tightWidth} ${tightHeight}`);
+                // 修复在某些浏览器下 Canvas 绘制 SVG 发生裁剪的 Bug
+                clonedSvg.setAttribute('width', `${tightWidth}px`);
+                clonedSvg.setAttribute('height', `${tightHeight}px`);
             }
 
             // 4. 将 SVG 序列化为字符串
@@ -315,6 +440,9 @@ const App = {
             } else {
                 alert('获取到的文件格式无效（缺少 processSteps 数据）');
             }
+            if (data.legendSettings) {
+                Object.assign(store.legendSettings.value, data.legendSettings);
+            }
         };
 
         const saveFile = async () => {
@@ -332,7 +460,8 @@ const App = {
             const saveData = {
                 projectName: nameToSave,
                 variables: store.variables.value,
-                processSteps: store.processSteps.value
+                processSteps: store.processSteps.value,
+                legendSettings: store.legendSettings.value
             };
 
             let useLocal = false;
@@ -369,16 +498,22 @@ const App = {
         return {
             ...store,
             ...canvasProps,
+            legendData,
             history,
             loadFile,
             saveFile,
             exportFile,
             showExportMenu,
+            showLegendSettingsModal,
             showPreviewModal,
             previewImageUrl,
             confirmDownloadPng,
             cancelDownloadPng,
             mainSvgRef,
+            toggleLegendLayer,
+            legendModalPosition,
+            openLegendSettings,
+            startDragLegendSettings,
             undo: history.undo,
             redo: history.redo,
             canUndo: history.canUndo,

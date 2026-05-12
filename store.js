@@ -21,6 +21,21 @@ function useStore() {
         { name: 'gap', value: '120' }
     ]);
 
+    const legendSettings = ref({
+        showLegend: true,
+        widthMode: 'substrate', // 'substrate' 或 'custom'
+        customWidth: 800,
+        marginTop: 40,
+        itemsPerRow: 4,
+        iconSize: 20,     // 图例每一个颜色方块的边长
+        bgColor: '#ffffff',
+        fontColor: '#000000',
+        fontFamily: 'Arial',
+        fontSize: 14,     // 图例字体大小
+        textSource: 'name', // 'name' 或 'material'
+        hiddenLegendIds: [] // 不显示的图层ID列表
+    });
+
     const projectName = ref('');
 
     const activeLayerIndex = ref(0);
@@ -125,6 +140,7 @@ function useStore() {
         projectName,
         processSteps,
         variables,
+        legendSettings,
         activeLayerIndex,
         activeStep,
         engineResult,

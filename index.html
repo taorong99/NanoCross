@@ -227,13 +227,130 @@
                           class="flashing-path"
                           style="pointer-events: none;" />
                 </g>
+
+                <!-- 图例区域 -->
+                <g class="legend-area">
+                    <!-- 背景框，宽度和衬底宽度相同 -->
+                    <rect v-show="legendSettings.showLegend !== false" :x="legendData.boxX" :y="legendData.boxY" :width="legendData.boxW" :height="legendData.boxH" :fill="legendSettings.bgColor" />
+                    
+                    <!-- 设置图标 (右上角) 导出时忽略 -->
+                    <g class="export-ignore" :transform="`translate(${legendData.iconX}, ${legendData.iconY})`" style="cursor: pointer;" @click.stop="openLegendSettings">
+                        <title>设置图例</title>
+                        <rect x="0" y="0" width="20" height="20" rx="4" fill="#444" />
+                        <text x="10" y="14" font-size="12" fill="#fff" text-anchor="middle">⚙</text>
+                    </g>
+
+                    <!-- 图例项 -->
+                    <g v-show="legendSettings.showLegend !== false" v-for="item in legendData.elements" :key="'legend-'+item.id">
+                        <rect :x="item.x + 10" :y="item.y" :width="legendSettings.iconSize" :height="legendSettings.iconSize" :fill="item.color" stroke="#333" stroke-width="1" />
+                        <text :x="item.x + 20 + legendSettings.iconSize" :y="item.y + legendSettings.iconSize / 2" :font-size="legendData.fontSize" :fill="legendSettings.fontColor" :font-family="legendSettings.fontFamily" dominant-baseline="middle">{{ item.text }}</text>
+                    </g>
+                </g>
              </svg>
              
-             <!-- 缩放控件 -->
+             <!--缩放控件-->
              <div class="controls-overlay" @mousedown.stop>
                  <span style="font-size: 14px; color: #ccc;">缩放: {{ currentZoom }}%</span>
                  <input type="range" v-model.number="currentZoom" min="10" max="300" style="width: 100px;">
                  <button class="btn btn-small" style="margin:0; background: #444;" @click="resetZoom">复原</button>
+             </div>
+
+             <!-- 图例设置模态框 -->
+             <div v-if="showLegendSettingsModal" style="position: fixed; z-index: 1000;" :style="{ left: legendModalPosition.left, top: legendModalPosition.top }" @mousedown.stop>
+                 <div class="modal-content" style="max-width: 500px; padding: 20px; margin: 0; box-shadow: 0 5px 20px rgba(0,0,0,0.5); border: 1px solid #444;">
+                     <div class="modal-header" style="cursor: move; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;" @mousedown="startDragLegendSettings">
+                         <h3 style="margin: 0; user-select: none;">图例设置</h3>
+                         <button class="btn btn-small" @click="showLegendSettingsModal = false" style="margin: 0;">✕</button>
+                     </div>
+                     
+                     <div class="form-group" style="margin-bottom: 15px;">
+                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                             <input type="checkbox" v-model="legendSettings.showLegend">
+                             <span style="font-weight: bold; color: #4A90E2;">启用图例展示</span>
+                         </label>
+                     </div>
+
+                     <div class="form-group">
+                         <label>整体宽度模式 (与衬底同宽则无需调整此宽度)</label>
+                         <select v-model="legendSettings.widthMode" class="form-control">
+                             <option value="substrate">与衬底同宽</option>
+                             <option value="custom">自定义居中宽度</option>
+                         </select>
+                     </div>
+
+                     <div v-if="legendSettings.widthMode === 'custom'" class="form-control-layout">
+                         <label>自定义总宽</label>
+                         <input type="number" v-model.number="legendSettings.customWidth" class="form-control" style="width: 80px;">
+                     </div>
+                     
+                     <div v-if="legendSettings.showLegend" class="form-group" style="display: flex; gap: 15px; margin-bottom: 10px;">
+                         <div style="flex: 1;">
+                             <label>距截面底部(px)</label>
+                             <input type="number" v-model.number="legendSettings.marginTop" class="form-control">
+                         </div>
+                         <div style="flex: 1;">
+                             <label>每行显示数(个)</label>
+                             <input type="number" v-model.number="legendSettings.itemsPerRow" class="form-control">
+                         </div>
+                     </div>
+                     
+                     <div v-if="legendSettings.showLegend" class="form-group" style="display: flex; gap: 15px; margin-bottom: 10px;">
+                         <div style="flex: 1;">
+                             <label>颜色块边长(px)</label>
+                             <input type="number" v-model.number="legendSettings.iconSize" class="form-control">
+                         </div>
+                         <div style="flex: 1;">
+                             <label>背景颜色</label>
+                             <input type="color" v-model="legendSettings.bgColor" class="form-control" style="height: 38px; padding: 2px;">
+                         </div>
+                         <div style="flex: 1;">
+                             <label>字体颜色</label>
+                             <input type="color" v-model="legendSettings.fontColor" class="form-control" style="height: 38px; padding: 2px;">
+                         </div>
+                     </div>
+                     
+                     <div v-if="legendSettings.showLegend" class="form-group" style="display: flex; gap: 10px; margin-bottom: 20px;">
+                         <div style="flex: 1;">
+                             <label>文字来源</label>
+                             <select v-model="legendSettings.textSource" class="form-control">
+                                 <option value="name">步骤</option>
+                                 <option value="material">材料</option>
+                             </select>
+                         </div>
+                         <div style="flex: 1;">
+                             <label>字体</label>
+                             <select v-model="legendSettings.fontFamily" class="form-control">
+                                 <option value="Arial">Arial</option>
+                                 <option value="Helvetica">Helvetica</option>
+                                 <option value="Times New Roman">Times New Roman</option>
+                                 <option value="Courier New">Courier New</option>
+                                 <option value="Verdana">Verdana</option>
+                                 <option value="Georgia">Georgia</option>
+                                 <option value="'Microsoft YaHei'">微软雅黑</option>
+                                 <option value="SimSun">宋体</option>
+                             </select>
+                         </div>
+                         <div style="flex: 1;">
+                             <label>字体大小</label>
+                             <input type="number" v-model.number="legendSettings.fontSize" class="form-control">
+                         </div>
+                     </div>
+                     
+                     <div v-if="legendSettings.showLegend" class="form-group" style="margin-bottom: 20px;">
+                         <label>已开启选择展示的图例图层（仅供选择衬底与沉积层）</label>
+                         <div style="max-height: 120px; overflow-y: auto; border: 1px solid #444; border-radius: 4px; padding: 5px; background: #222;">
+                             <div v-for="step in processSteps.filter(s => s.type === 'deposit' || s === processSteps[0])" :key="'layer-sel-'+step.id" style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px; padding: 4px;">
+                                 <input type="checkbox" :checked="!legendSettings.hiddenLegendIds.includes(step.id)" @change="toggleLegendLayer(step.id)">
+                                 <div :style="{ width: '14px', height: '14px', backgroundColor: step.color, border: '1px solid #666' }"></div>
+                                 <span style="color: #ccc; font-size: 13px;">{{ step.name }} {{ step.material ? `[${step.material}]` : '' }}</span>
+                             </div>
+                         </div>
+                     </div>
+                     
+                     <div class="modal-actions" style="margin-top: 10px;">
+                         <button class="btn btn-primary" @click="showLegendSettingsModal = false" style="width: 100%;">确定</button>
+                     </div>
+                 </div>
              </div>
 
              <!-- PNG 导出预览模态框 -->
