@@ -8,6 +8,8 @@ function useFlowDiagramPipeline(options) {
     const viewMode = options.viewMode;
     const mainEngineResult = options.mainEngineResult;
     const targetViewport = options.targetViewport;
+    const stepMetaMap = options.stepMetaMap;
+    const layoutMeta = options.layoutMeta;
     const FLOW_DIAGRAM_MIN_VIEWPORT = 100;
 
     const qualityGridMap = {
@@ -17,6 +19,7 @@ function useFlowDiagramPipeline(options) {
     };
 
     const allStepGeometry = ref([]);
+    const items = ref([]);
     const isFlowDiagramDirty = ref(true);
     const isGeneratingFlowDiagram = ref(false);
     const flowDiagramGenerationError = ref('');
@@ -26,12 +29,60 @@ function useFlowDiagramPipeline(options) {
 
     const visibleHiddenIds = computed(() => new Set(flowDiagramSettings.value.hiddenStepIds || []));
 
-    const visibleFlowDiagramCards = computed(() => {
-        return allStepGeometry.value.filter(item => !visibleHiddenIds.value.has(item.stepId));
-    });
-
     const markDirty = () => {
         isFlowDiagramDirty.value = true;
+    };
+
+    const getEffectiveItemsPerRow = () => {
+        if (!layoutMeta || !layoutMeta.value) {
+            return Math.max(1, flowDiagramSettings.value.itemsPerRow || 1);
+        }
+        return Math.max(1, layoutMeta.value.effectiveItemsPerRow || 1);
+    };
+
+    const buildHiddenItems = () => {
+        const hiddenIds = flowDiagramSettings.value.hiddenStepIds || [];
+        return hiddenIds
+            .map((id, hiddenOrder) => {
+                const meta = stepMetaMap && stepMetaMap.value ? stepMetaMap.value.get(id) : null;
+                if (!meta) return null;
+                return {
+                    stepId: id,
+                    hiddenOrder,
+                    step: meta.step,
+                    index: meta.index,
+                    stepIndex: meta.index,
+                    stepName: meta.step.name,
+                    caption: meta.step.flowDiagramCaption || meta.step.name || '',
+                    isHidden: true
+                };
+            })
+            .filter(Boolean);
+    };
+
+    const rebuildItems = () => {
+        const effectiveItemsPerRow = getEffectiveItemsPerRow();
+        items.value = allStepGeometry.value
+            .map(item => {
+                const meta = stepMetaMap && stepMetaMap.value ? stepMetaMap.value.get(item.stepId) : null;
+                if (!meta) return null;
+                return {
+                    ...item,
+                    step: meta.step,
+                    index: meta.index,
+                    stepIndex: meta.index,
+                    stepName: meta.step.name,
+                    caption: meta.step.flowDiagramCaption || meta.step.name || '',
+                    isHidden: visibleHiddenIds.value.has(item.stepId)
+                };
+            })
+            .filter(item => item && !item.isHidden)
+            .map((item, visibleIndex) => ({
+                ...item,
+                layoutIndex: visibleIndex,
+                rowIndex: Math.floor(visibleIndex / effectiveItemsPerRow),
+                colIndex: visibleIndex % effectiveItemsPerRow
+            }));
     };
 
     const getGridRes = (quality) => {
@@ -58,6 +109,7 @@ function useFlowDiagramPipeline(options) {
         allStepGeometry.value = snapshots.map(snapshot =>
             createSnapshotGeometry(snapshot.stepIndex, snapshot.engineResult, scaleMeta, snapshot.quality)
         );
+        rebuildItems();
     };
 
     const getScaleMeta = (snapshots) => {
@@ -171,6 +223,7 @@ function useFlowDiagramPipeline(options) {
 
             const scaleMeta = getScaleMeta(snapshots);
             allStepGeometry.value = snapshots.map(snapshot => createSnapshotGeometry(snapshot.stepIndex, snapshot.engineResult, scaleMeta, quality));
+            rebuildItems();
             flowDiagramGenerationSummary.value = {
                 generatedAt: Date.now(),
                 quality,
@@ -220,6 +273,24 @@ function useFlowDiagramPipeline(options) {
         scheduleAutoRefresh();
     });
 
+    watch(visibleHiddenIds, () => {
+        rebuildItems();
+    });
+
+    watch(() => JSON.stringify(
+        processSteps.value.map(step => ({
+            id: step.id,
+            name: step.name,
+            flowDiagramCaption: step.flowDiagramCaption
+        }))
+    ), () => {
+        rebuildItems();
+    });
+
+    watch(() => JSON.stringify(layoutMeta && layoutMeta.value ? layoutMeta.value : {}), () => {
+        rebuildItems();
+    });
+
     watch(() => JSON.stringify(getTargetViewport()), () => {
         rebuildFlowDiagramLayout();
     });
@@ -236,7 +307,8 @@ function useFlowDiagramPipeline(options) {
 
     return {
         allStepGeometry,
-        visibleFlowDiagramCards,
+        items,
+        hiddenItems: computed(() => buildHiddenItems()),
         isFlowDiagramDirty,
         isGeneratingFlowDiagram,
         flowDiagramGenerationError,

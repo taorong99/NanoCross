@@ -62,13 +62,23 @@ const App = {
             height: flowDiagramLayout.value.height
         }));
 
+        const stepMetaMap = computed(() => {
+            const map = new Map();
+            store.processSteps.value.forEach((step, index) => {
+                map.set(step.id, { step, index });
+            });
+            return map;
+        });
+
         const flowDiagramPipeline = useFlowDiagramPipeline({
             processSteps: store.processSteps,
             parsedSteps: store.parsedSteps,
             flowDiagramSettings: store.flowDiagramSettings,
             viewMode: store.viewMode,
             mainEngineResult: store.engineResult,
-            targetViewport: flowDiagramViewport
+            targetViewport: flowDiagramViewport,
+            stepMetaMap,
+            layoutMeta: flowDiagramLayout
         });
 
         const openLegendSettings = () => {
@@ -134,43 +144,8 @@ const App = {
             document.removeEventListener('mouseup', endDragFlowDiagramSettings);
         };
 
-        const stepMetaMap = computed(() => {
-            const map = new Map();
-            store.processSteps.value.forEach((step, index) => {
-                map.set(step.id, { step, index });
-            });
-            return map;
-        });
-
-        const visibleFlowDiagramSteps = computed(() => {
-            const hiddenIds = new Set(store.flowDiagramSettings.value.hiddenStepIds || []);
-            return store.processSteps.value
-                .map((step, index) => ({ step, index }))
-                .filter(({ step }) => !hiddenIds.has(step.id));
-        });
-
-        const flowDiagramCards = computed(() => {
-            return flowDiagramPipeline.visibleFlowDiagramCards.value
-                .map(card => {
-                    const meta = stepMetaMap.value.get(card.stepId);
-                    if (!meta) return null;
-                    return {
-                        ...card,
-                        step: meta.step,
-                        index: meta.index,
-                        caption: meta.step.flowDiagramCaption || meta.step.name || ''
-                    };
-                })
-                .filter(Boolean);
-        });
-
-        const hiddenFlowDiagramSteps = computed(() => {
-            const hiddenIds = store.flowDiagramSettings.value.hiddenStepIds || [];
-            return hiddenIds
-                .map(id => stepMetaMap.value.get(id))
-                .filter(Boolean)
-                .map(meta => ({ step: meta.step, index: meta.index }));
-        });
+        const flowDiagramCards = computed(() => flowDiagramPipeline.items.value);
+        const hiddenFlowDiagramSteps = computed(() => flowDiagramPipeline.hiddenItems.value);
 
         const flowDiagramGridStyle = computed(() => ({
             display: 'grid',
@@ -742,7 +717,6 @@ const App = {
             ...canvasProps,
             ...flowDiagramPipeline,
             legendData,
-            visibleFlowDiagramSteps,
             flowDiagramCards,
             hiddenFlowDiagramSteps,
             flowDiagramGridStyle,
