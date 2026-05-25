@@ -11,6 +11,7 @@ function useFlowDiagramPipeline(options) {
     const stepMetaMap = options.stepMetaMap;
     const layoutMeta = options.layoutMeta;
     const FLOW_DIAGRAM_MIN_VIEWPORT = 100;
+    const FLOW_DIAGRAM_BATCH_SIZE = 2;
 
     const qualityGridMap = {
         draft: 4,
@@ -24,8 +25,12 @@ function useFlowDiagramPipeline(options) {
     const isGeneratingFlowDiagram = ref(false);
     const flowDiagramGenerationError = ref('');
     const flowDiagramGenerationSummary = ref({ generatedAt: 0, quality: flowDiagramSettings.value.quality, count: 0 });
+    const flowDiagramProgressDone = ref(0);
+    const flowDiagramProgressTotal = ref(0);
 
     let refreshTimer = null;
+    let generationToken = 0;
+    let suppressAutoRefreshOnce = false;
 
     const visibleHiddenIds = computed(() => new Set(flowDiagramSettings.value.hiddenStepIds || []));
 
@@ -87,6 +92,16 @@ function useFlowDiagramPipeline(options) {
 
     const getGridRes = (quality) => {
         return qualityGridMap[quality] || qualityGridMap.draft;
+    };
+
+    const yieldToBrowser = () => {
+        return new Promise(resolve => {
+            if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+                window.requestIdleCallback(() => resolve(), { timeout: 32 });
+            } else {
+                setTimeout(resolve, 0);
+            }
+        });
     };
 
     const getTargetViewport = () => {
@@ -208,19 +223,46 @@ function useFlowDiagramPipeline(options) {
 
     const generateFlowDiagram = async (requestedQuality) => {
         const quality = requestedQuality || flowDiagramSettings.value.quality;
+        const currentToken = ++generationToken;
+        if (refreshTimer) {
+            clearTimeout(refreshTimer);
+            refreshTimer = null;
+        }
         flowDiagramGenerationError.value = '';
         isGeneratingFlowDiagram.value = true;
+        flowDiagramProgressDone.value = 0;
+        flowDiagramProgressTotal.value = parsedSteps.value.length;
 
         try {
-            const snapshots = [];
-            for (let stepIndex = 0; stepIndex < parsedSteps.value.length; stepIndex++) {
-                const prefixSteps = parsedSteps.value.slice(0, stepIndex + 1).map(step => ({ ...step, visible: true }));
-                const engineResult = window.calculateProfiles(prefixSteps, { gridRes: getGridRes(quality) });
-                const fullResult = window.calculateProfiles(prefixSteps.map(step => ({ ...step, visible: true })), { gridRes: getGridRes(quality) });
-                engineResult.fullMaxH = fullResult.maxH;
-                snapshots.push({ stepIndex, engineResult });
+            if (!parsedSteps.value.length) {
+                allStepGeometry.value = [];
+                rebuildItems();
+                flowDiagramGenerationSummary.value = {
+                    generatedAt: Date.now(),
+                    quality,
+                    count: 0
+                };
+                isFlowDiagramDirty.value = false;
+                return;
             }
 
+            const snapshots = [];
+            for (let stepIndex = 0; stepIndex < parsedSteps.value.length; stepIndex++) {
+                if (currentToken !== generationToken) return;
+                const prefixSteps = parsedSteps.value.slice(0, stepIndex + 1).map(step => ({ ...step, visible: true }));
+                const engineResult = window.calculateProfiles(prefixSteps, { gridRes: getGridRes(quality) });
+                engineResult.fullMaxH = engineResult.maxH;
+                snapshots.push({ stepIndex, engineResult });
+                flowDiagramProgressDone.value = stepIndex + 1;
+
+                const reachedBatchBoundary = (stepIndex + 1) % FLOW_DIAGRAM_BATCH_SIZE === 0;
+                const hasMoreSteps = stepIndex < parsedSteps.value.length - 1;
+                if (reachedBatchBoundary && hasMoreSteps) {
+                    await yieldToBrowser();
+                }
+            }
+
+            if (currentToken !== generationToken) return;
             const scaleMeta = getScaleMeta(snapshots);
             allStepGeometry.value = snapshots.map(snapshot => createSnapshotGeometry(snapshot.stepIndex, snapshot.engineResult, scaleMeta, quality));
             rebuildItems();
@@ -233,11 +275,17 @@ function useFlowDiagramPipeline(options) {
         } catch (error) {
             flowDiagramGenerationError.value = error && error.message ? error.message : '流程图生成失败';
         } finally {
-            isGeneratingFlowDiagram.value = false;
+            if (currentToken === generationToken) {
+                isGeneratingFlowDiagram.value = false;
+            }
         }
     };
 
     const scheduleAutoRefresh = () => {
+        if (suppressAutoRefreshOnce) {
+            suppressAutoRefreshOnce = false;
+            return;
+        }
         if (refreshTimer) {
             clearTimeout(refreshTimer);
         }
@@ -247,6 +295,14 @@ function useFlowDiagramPipeline(options) {
                 generateFlowDiagram();
             }
         }, 360);
+    };
+
+    const suspendNextAutoRefresh = () => {
+        suppressAutoRefreshOnce = true;
+        if (refreshTimer) {
+            clearTimeout(refreshTimer);
+            refreshTimer = null;
+        }
     };
 
     const geometrySignature = computed(() => JSON.stringify(
@@ -313,8 +369,11 @@ function useFlowDiagramPipeline(options) {
         isGeneratingFlowDiagram,
         flowDiagramGenerationError,
         flowDiagramGenerationSummary,
+        flowDiagramProgressDone,
+        flowDiagramProgressTotal,
         generateFlowDiagram,
         markDirty,
+        suspendNextAutoRefresh,
         rebuildFlowDiagramLayout
     };
 }

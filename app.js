@@ -17,6 +17,9 @@ const App = {
         const showPreviewModal = ref(false);
         const previewImageUrl = ref('');
         const previewFileName = ref('');
+        const pendingPreviewDownload = ref(null);
+        const showFlowDiagramExportQualityModal = ref(false);
+        const pendingFlowDiagramExportFormat = ref('');
         const mainSvgRef = ref(null);
         const hoverLayerIndex = ref(-1);
         const hoverPatternIndex = ref(-1);
@@ -171,10 +174,23 @@ const App = {
         };
 
         const flowDiagramSummaryText = computed(() => {
-            if (flowDiagramPipeline.isGeneratingFlowDiagram.value) return '生成中...';
+            if (flowDiagramPipeline.isGeneratingFlowDiagram.value) {
+                const done = flowDiagramPipeline.flowDiagramProgressDone.value || 0;
+                const total = flowDiagramPipeline.flowDiagramProgressTotal.value || 0;
+                return total > 0 ? `生成中 (${done}/${total})...` : '生成中...';
+            }
             if (flowDiagramPipeline.flowDiagramGenerationError.value) return '生成失败';
             if (flowDiagramPipeline.isFlowDiagramDirty.value) return '需要刷新';
             return '已同步';
+        });
+
+        const previewResolutionText = computed(() => {
+            if (!pendingPreviewDownload.value) return '';
+            const width = pendingPreviewDownload.value.width || 0;
+            const height = pendingPreviewDownload.value.height || 0;
+            const scale = pendingPreviewDownload.value.scale || 1;
+            if (!width || !height) return '';
+            return `导出分辨率：${width} x ${height}（倍率 ${scale}x）`;
         });
 
         const toggleLegendLayer = (id) => {
@@ -498,8 +514,66 @@ const App = {
             }
         };
 
-        const exportFile = (format) => {
-            if (!mainSvgRef.value) return;
+        const ensureSvgNamespace = (svgString) => {
+            if (!svgString.includes('xmlns="http://www.w3.org/2000/svg"')) {
+                return svgString.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" ');
+            }
+            return svgString;
+        };
+
+        const getPngExportScale = (quality, mode) => {
+            const normalizedQuality = quality || 'draft';
+            if (mode === 'flowDiagram') {
+                if (normalizedQuality === 'high') return 3;
+                if (normalizedQuality === 'balanced') return 2;
+                return 1.4;
+            }
+            return 1;
+        };
+
+        const triggerSvgDownload = (svgString, fileName) => {
+            const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${fileName}.svg`;
+            a.click();
+            URL.revokeObjectURL(url);
+        };
+
+        const openPngPreviewFromSvg = (svgString, fileName, exportWidth, exportHeight, options = {}) => {
+            const scale = Number(options.scale) || 1;
+            const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+            const url = URL.createObjectURL(svgBlob);
+
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.max(1, Math.round(exportWidth * scale));
+                canvas.height = Math.max(1, Math.round(exportHeight * scale));
+                const ctx = canvas.getContext('2d');
+
+                if (ctx) {
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    previewImageUrl.value = canvas.toDataURL('image/png');
+                    previewFileName.value = `${fileName}.png`;
+                    pendingPreviewDownload.value = {
+                        fileName: `${fileName}.png`,
+                        width: canvas.width,
+                        height: canvas.height,
+                        scale
+                    };
+                    showPreviewModal.value = true;
+                }
+                URL.revokeObjectURL(url);
+            };
+            img.src = url;
+        };
+
+        const buildMainExportPayload = () => {
+            if (!mainSvgRef.value) return null;
 
             const clonedSvg = mainSvgRef.value.cloneNode(true);
             const ignores = clonedSvg.querySelectorAll('.export-ignore, .flashing-path');
@@ -511,7 +585,9 @@ const App = {
             clonedSvg.removeAttribute('width');
             clonedSvg.removeAttribute('height');
 
-            let resObj = store.engineResult.value;
+            let exportWidth = 1920;
+            let exportHeight = 1080;
+            const resObj = store.engineResult.value;
             if (resObj && typeof resObj.subLeft === 'number') {
                 const margin = 20;
                 const tightX = resObj.subLeft - margin;
@@ -524,71 +600,191 @@ const App = {
                 clonedSvg.setAttribute('viewBox', `${tightX} ${tightY} ${tightWidth} ${tightHeight}`);
                 clonedSvg.setAttribute('width', `${tightWidth}px`);
                 clonedSvg.setAttribute('height', `${tightHeight}px`);
+                exportWidth = tightWidth;
+                exportHeight = tightHeight;
             }
 
             const serializer = new XMLSerializer();
-            let svgString = serializer.serializeToString(clonedSvg);
-
-            if (!svgString.includes('xmlns="http://www.w3.org/2000/svg"')) {
-                svgString = svgString.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" ');
-            }
-
+            const svgString = ensureSvgNamespace(serializer.serializeToString(clonedSvg));
             const fileName = (store.projectName.value || 'NanoCross_Project') + '-export';
 
+            return {
+                svgString,
+                fileName,
+                exportWidth,
+                exportHeight,
+                exportQuality: 'main'
+            };
+        };
+
+        const buildFlowDiagramExportPayload = () => {
+            const cards = flowDiagramCards.value || [];
+            if (!cards.length) return null;
+
+            const boardPadding = Number(store.flowDiagramSettings.value.boardPadding) || 0;
+            const gapX = Number(store.flowDiagramSettings.value.gapX) || 0;
+            const gapY = Number(store.flowDiagramSettings.value.gapY) || 0;
+            const captionHeight = store.flowDiagramSettings.value.showCaption ? 64 : 0;
+            const cardHeaderHeight = 41;
+            const cardBodyHeight = flowDiagramViewport.value.height;
+            const cardHeight = cardHeaderHeight + cardBodyHeight + captionHeight;
+            const itemsPerRow = Math.max(1, flowDiagramLayout.value.effectiveItemsPerRow || 1);
+            const cardWidth = Math.max(1, flowDiagramViewport.value.width);
+            const totalRows = cards.length ? Math.max(...cards.map(card => (card.rowIndex || 0))) + 1 : 0;
+            const boardWidth = itemsPerRow * cardWidth + Math.max(0, itemsPerRow - 1) * gapX + boardPadding * 2;
+            const cardsHeight = totalRows > 0 ? (totalRows * cardHeight) + Math.max(0, totalRows - 1) * gapY : 0;
+            const boardHeight = cardsHeight + boardPadding * 2;
+            const captionAnchor = getFlowDiagramCaptionAnchor();
+
+            let svgParts = [
+                `<svg xmlns="http://www.w3.org/2000/svg" width="${boardWidth}" height="${boardHeight}" viewBox="0 0 ${boardWidth} ${boardHeight}">`,
+                `<rect x="0" y="0" width="${boardWidth}" height="${boardHeight}" fill="${store.flowDiagramSettings.value.boardBackground}"/>`
+            ];
+
+            cards.forEach(card => {
+                const x = boardPadding + (card.colIndex || 0) * (cardWidth + gapX);
+                const y = boardPadding + (card.rowIndex || 0) * (cardHeight + gapY);
+                const captionTextAnchor = captionAnchor || 'middle';
+                const captionTextX = captionTextAnchor === 'start'
+                    ? 18
+                    : (captionTextAnchor === 'end' ? Math.max(18, cardWidth - 18) : cardWidth / 2);
+                const escapedCaption = (card.caption || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                const escapedStepName = (`Step ${card.index}`).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+                svgParts.push(`<g transform="translate(${x}, ${y})">`);
+                svgParts.push(`<rect x="0" y="0" width="${cardWidth}" height="${cardHeight}" fill="#ffffff" stroke="#d1d5db" stroke-width="1"/>`);
+                svgParts.push(`<rect x="0" y="0" width="${cardWidth}" height="${cardHeaderHeight}" fill="#fafafa" stroke="#ececec" stroke-width="1"/>`);
+                svgParts.push(`<text x="12" y="25" font-size="12" font-family="Arial" fill="#666666">${escapedStepName}</text>`);
+                svgParts.push(`<rect x="0" y="${cardHeaderHeight}" width="${cardWidth}" height="${cardBodyHeight}" fill="#ffffff"/>`);
+                svgParts.push(`<g transform="translate(0, ${cardHeaderHeight})">`);
+                card.paths.forEach(path => {
+                    svgParts.push(`<path d="${path.d}" fill="${path.fill}"></path>`);
+                });
+                svgParts.push(`</g>`);
+
+                if (store.flowDiagramSettings.value.showCaption) {
+                    svgParts.push(`<line x1="0" y1="${cardHeaderHeight + cardBodyHeight}" x2="${cardWidth}" y2="${cardHeaderHeight + cardBodyHeight}" stroke="#ececec" stroke-width="1"/>`);
+                    svgParts.push(
+                        `<text x="${captionTextX}" y="${cardHeaderHeight + cardBodyHeight + 36}" text-anchor="${captionTextAnchor}" font-family="${store.flowDiagramSettings.value.fontFamily}" font-size="${store.flowDiagramSettings.value.fontSize}" fill="${store.flowDiagramSettings.value.fontColor}">${escapedCaption}</text>`
+                    );
+                }
+
+                svgParts.push(`</g>`);
+            });
+
+            svgParts.push(`</svg>`);
+
+            return {
+                svgString: svgParts.join(''),
+                fileName: (store.projectName.value || 'NanoCross_Project') + '-flow-diagram',
+                exportWidth: boardWidth,
+                exportHeight: boardHeight,
+                exportQuality: store.flowDiagramSettings.value.quality
+            };
+        };
+
+        const exportSvgPayload = (payload, format) => {
+            if (!payload) return;
             if (format === 'svg') {
-                const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `${fileName}.svg`;
-                a.click();
-                URL.revokeObjectURL(url);
+                triggerSvgDownload(payload.svgString, payload.fileName);
             } else if (format === 'png') {
-                const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
-                const url = URL.createObjectURL(svgBlob);
-
-                const img = new Image();
-                img.onload = () => {
-                    const currentViewBox = clonedSvg.getAttribute('viewBox');
-                    let targetW = 1920;
-                    let targetH = 1080;
-                    if (currentViewBox) {
-                        const [, , vbW, vbH] = currentViewBox.split(' ').map(Number);
-                        if (vbW && vbH) {
-                            targetH = (vbH / vbW) * targetW;
-                        }
-                    }
-
-                    const canvas = document.createElement('canvas');
-                    canvas.width = targetW;
-                    canvas.height = targetH;
-                    const ctx = canvas.getContext('2d');
-
-                    ctx.fillStyle = '#ffffff';
-                    ctx.fillRect(0, 0, targetW, targetH);
-                    ctx.drawImage(img, 0, 0, targetW, targetH);
-
-                    previewImageUrl.value = canvas.toDataURL('image/png');
-                    previewFileName.value = `${fileName}.png`;
-                    showPreviewModal.value = true;
-                    URL.revokeObjectURL(url);
-                };
-                img.src = url;
+                const exportMode = payload.exportQuality === 'main' ? 'main' : 'flowDiagram';
+                const scale = getPngExportScale(payload.exportQuality, exportMode);
+                openPngPreviewFromSvg(payload.svgString, payload.fileName, payload.exportWidth, payload.exportHeight, { scale });
             }
+        };
+
+        const ensureFlowDiagramExportGeometry = async (targetQuality) => {
+            const summary = flowDiagramPipeline.flowDiagramGenerationSummary.value || {};
+            const needsGeneration =
+                !flowDiagramPipeline.allStepGeometry.value.length ||
+                flowDiagramPipeline.isFlowDiagramDirty.value ||
+                summary.quality !== targetQuality;
+
+            if (!needsGeneration) {
+                return true;
+            }
+
+            await flowDiagramPipeline.generateFlowDiagram(targetQuality);
+            return !flowDiagramPipeline.flowDiagramGenerationError.value;
+        };
+
+        const continueFlowDiagramExport = async (format) => {
+            const payload = buildFlowDiagramExportPayload();
+            if (!payload) {
+                alert('当前没有可导出的流程图子图。');
+                return;
+            }
+            exportSvgPayload(payload, format);
+        };
+
+        const requestFlowDiagramExport = async (format) => {
+            if (!flowDiagramCards.value.length) {
+                alert('当前没有可导出的流程图子图。');
+                return;
+            }
+
+            if (store.flowDiagramSettings.value.quality !== 'high') {
+                pendingFlowDiagramExportFormat.value = format;
+                showFlowDiagramExportQualityModal.value = true;
+                return;
+            }
+
+            const ok = await ensureFlowDiagramExportGeometry('high');
+            if (!ok) return;
+            await continueFlowDiagramExport(format);
+        };
+
+        const confirmFlowDiagramHighExport = async () => {
+            showFlowDiagramExportQualityModal.value = false;
+            const targetFormat = pendingFlowDiagramExportFormat.value;
+            pendingFlowDiagramExportFormat.value = '';
+            if (!targetFormat) return;
+
+            flowDiagramPipeline.suspendNextAutoRefresh();
+            store.flowDiagramSettings.value.quality = 'high';
+            const ok = await ensureFlowDiagramExportGeometry('high');
+            if (!ok) return;
+            await continueFlowDiagramExport(targetFormat);
+        };
+
+        const skipFlowDiagramHighExport = async () => {
+            const targetFormat = pendingFlowDiagramExportFormat.value;
+            showFlowDiagramExportQualityModal.value = false;
+            pendingFlowDiagramExportFormat.value = '';
+            if (!targetFormat) return;
+            const currentQuality = store.flowDiagramSettings.value.quality || 'draft';
+            const ok = await ensureFlowDiagramExportGeometry(currentQuality);
+            if (!ok) return;
+            await continueFlowDiagramExport(targetFormat);
+        };
+
+        const exportFile = async (format) => {
+            if (store.viewMode.value === 'flowDiagram') {
+                await requestFlowDiagramExport(format);
+                return;
+            }
+
+            const payload = buildMainExportPayload();
+            exportSvgPayload(payload, format);
         };
 
         const confirmDownloadPng = () => {
             if (!previewImageUrl.value) return;
             const a = document.createElement('a');
             a.href = previewImageUrl.value;
-            a.download = previewFileName.value;
+            a.download = pendingPreviewDownload.value && pendingPreviewDownload.value.fileName
+                ? pendingPreviewDownload.value.fileName
+                : previewFileName.value;
             a.click();
             showPreviewModal.value = false;
+            pendingPreviewDownload.value = null;
         };
 
         const cancelDownloadPng = () => {
             showPreviewModal.value = false;
             previewImageUrl.value = '';
+            pendingPreviewDownload.value = null;
         };
 
         const applyData = (data) => {
@@ -745,9 +941,13 @@ const App = {
             showLegendSettingsModal,
             showFlowDiagramSettingsModal,
             showPreviewModal,
+            showFlowDiagramExportQualityModal,
             previewImageUrl,
+            previewResolutionText,
             confirmDownloadPng,
             cancelDownloadPng,
+            confirmFlowDiagramHighExport,
+            skipFlowDiagramHighExport,
             mainSvgRef,
             legendModalPosition,
             flowDiagramModalPosition,

@@ -143,7 +143,7 @@
              <div style="position: absolute; top: 20px; left: 20px; z-index: 100; display: flex; flex-direction: column; gap: 8px;">
                  <button class="btn btn-small floating-btn" @click.stop="loadFile">加载</button>
                  <button class="btn btn-small floating-btn" @click.stop="saveFile">保存</button>
-                   <div v-if="viewMode === 'main'" style="position: relative;" @mouseleave="showExportMenu = false">
+                   <div style="position: relative;" @mouseleave="showExportMenu = false">
                        <button class="btn btn-small floating-btn" style="width: 100%; margin: 0;" @mouseenter="showExportMenu = true" @click.stop="showExportMenu = !showExportMenu">导出▾</button>
                        <div v-show="showExportMenu" style="position: absolute; top: 100%; left: 0; z-index: 200; padding-top: 4px; min-width: 80px; width: 100%;">
                            <div style="background: #333; border: 1px solid #555; border-radius: 4px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 2px 8px rgba(0,0,0,0.5);">
@@ -500,12 +500,29 @@
              <div v-if="showPreviewModal" class="modal-overlay">
                  <div class="modal-content">
                      <h3>PNG 导出预览</h3>
+                     <p v-if="previewResolutionText" style="margin: 0; width: 100%; text-align: left; color: #c9d1d9; font-size: 13px;">{{ previewResolutionText }}</p>
                      <div class="preview-container">
                          <img :src="previewImageUrl" alt="PNG Preview" class="preview-img" />
                      </div>
                      <div class="modal-actions">
                          <button class="btn btn-secondary" @click="cancelDownloadPng">取消</button>
                          <button class="btn btn-primary" @click="confirmDownloadPng">下载</button>
+                     </div>
+                 </div>
+             </div>
+
+             <div v-if="showFlowDiagramExportQualityModal" class="modal-overlay">
+                 <div class="modal-content" style="max-width: 420px;">
+                     <h3>流程图导出提示</h3>
+                     <p style="margin: 12px 0 0; color: #f4f4f5; font-size: 16px; font-weight: 600; line-height: 1.65; text-align: left; width: 100%;">
+                         当前流程图质量不是 <code>high</code>。是否先切换到 <code>high</code> 重新生成后再导出？
+                     </p>
+                     <p style="margin: 2px 0 0; color: #b6bcc6; font-size: 13px; line-height: 1.65; text-align: left; width: 100%;">
+                         提示：<code>high</code> 质量会带来更长的生成时间，但导出结果会更精细。
+                     </p>
+                     <div class="modal-actions">
+                         <button class="btn btn-secondary" @click="skipFlowDiagramHighExport">直接导出当前质量</button>
+                         <button class="btn btn-primary" @click="confirmFlowDiagramHighExport">切换到 high 后导出</button>
                      </div>
                  </div>
              </div>
