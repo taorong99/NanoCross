@@ -137,7 +137,7 @@
         <div class="resizer" @mousedown.prevent="startResize($event, 'props')"></div>
 
         <!-- 第三列：SVG 画布 -->
-        <div class="canvas-container" @mousedown.left="startPan" @click="focusedPatternIndex = -1; flashingPatternIndex = -1" :key="triggerResize">
+        <div class="canvas-container" @mousedown.left="viewMode === 'main' && startPan($event)" @click="focusedPatternIndex = -1; flashingPatternIndex = -1" :key="triggerResize">
              
              <!-- 左上角功能按钮 -->
              <div style="position: absolute; top: 20px; left: 20px; z-index: 100; display: flex; flex-direction: column; gap: 8px;">
@@ -257,35 +257,38 @@
              </svg>
 
              <div v-if="viewMode === 'flowDiagram'" style="position: absolute; inset: 0; padding: 96px 24px 24px; overflow: auto; background: #f4f4f4;" @mousedown.stop>
-                 <div :style="{ background: flowDiagramSettings.boardBackground, padding: flowDiagramSettings.boardPadding + 'px', minHeight: '100%', boxSizing: 'border-box', borderRadius: '8px' }">
-                     <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
-                         <div>
-                             <h3 style="margin: 0; color: #222;">流程图视图</h3>
-                             <p style="margin: 6px 0 0; color: #666; font-size: 13px;">Phase 1 占位：流程图管线尚未接入，当前仅用于配置、保存与后续渲染入口。</p>
-                         </div>
-                         <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-                             <span style="font-size: 12px; color: #666;">每行 {{ flowDiagramSettings.itemsPerRow }} 张</span>
-                             <span style="font-size: 12px; color: #666;">文字 {{ flowDiagramSettings.showCaption ? '显示' : '隐藏' }}</span>
-                             <span style="font-size: 12px; color: #666;">质量 {{ flowDiagramSettings.quality }}</span>
-                         </div>
-                     </div>
-
-                     <div style="border: 1px dashed #bbb; border-radius: 10px; padding: 18px; background: #fff;">
-                         <div style="margin-bottom: 14px; color: #555; font-size: 13px;">
-                             当前可见流程图步骤数：{{ visibleFlowDiagramSteps.length }}
-                         </div>
-                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px;">
-                             <div v-for="item in visibleFlowDiagramSteps" :key="'flow-placeholder-' + item.step.id" style="border: 1px solid #ddd; border-radius: 10px; background: #fafafa; overflow: hidden;">
-                                 <div style="height: 120px; background: linear-gradient(180deg, #fefefe 0%, #f0f0f0 100%); display: flex; align-items: center; justify-content: center; color: #888; font-size: 13px;">
-                                     子图占位
-                                 </div>
-                                 <div v-if="flowDiagramSettings.showCaption" :style="{ padding: '10px 12px', textAlign: flowDiagramSettings.textAlign, color: flowDiagramSettings.fontColor, fontFamily: flowDiagramSettings.fontFamily, fontSize: flowDiagramSettings.fontSize + 'px', borderTop: '1px solid #e5e5e5', background: '#fff' }">
-                                     {{ item.step.flowDiagramCaption || item.step.name }}
-                                 </div>
-                             </div>
-                         </div>
-                     </div>
-                 </div>
+                 <flow-diagram-board
+                     ref="flowDiagramBoardRef"
+                     :board-style="flowDiagramBoardStyle"
+                     :grid-style="flowDiagramGridStyle"
+                     :summary-text="flowDiagramSummaryText"
+                     :cards="flowDiagramCards"
+                     :hidden-steps="hiddenFlowDiagramSteps"
+                     :settings="flowDiagramSettings"
+                     :is-generating="isGeneratingFlowDiagram"
+                     :is-dirty="isFlowDiagramDirty"
+                     :generation-error="flowDiagramGenerationError"
+                     @refresh="refreshFlowDiagram"
+                     @show-step="showFlowDiagramStep"
+                 >
+                     <flow-diagram-card
+                         v-for="card in flowDiagramCards"
+                         :key="'flow-card-' + card.stepId"
+                         :card="card"
+                         :flow-diagram-settings="flowDiagramSettings"
+                         :flow-diagram-viewport="flowDiagramViewport"
+                         :editing-flow-diagram-step-id="editingFlowDiagramStepId"
+                         :flow-diagram-draft-caption="flowDiagramDraftCaption"
+                         :caption-anchor="getFlowDiagramCaptionAnchor()"
+                         :caption-x="getFlowDiagramCaptionX()"
+                         :caption-preview="getFlowDiagramCaptionPreview(card.step)"
+                         @toggle-hidden="toggleFlowDiagramStepHidden"
+                         @start-edit="startEditingFlowDiagramCaption"
+                         @update:draft-caption="flowDiagramDraftCaption = $event"
+                         @caption-keydown="handleFlowDiagramCaptionKeydown"
+                         @commit-caption="commitFlowDiagramCaption"
+                     />
+                 </flow-diagram-board>
              </div>
              
              <!--缩放控件-->
@@ -515,6 +518,7 @@
     <script src="store.js"></script>
     <script src="history.js"></script>
     <script src="canvas.js"></script>
+    <script src="flowDiagramPipeline.js"></script>
     <script src="components.js"></script>
     <script src="app.js"></script>
 </body>

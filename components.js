@@ -120,4 +120,134 @@ function registerComponents(app) {
             </div>
         `
     });
+
+    // =========================================
+    // 组件 4: 流程图子图卡片
+    // 负责单张流程图卡片的头部、子图绘制区域与文字编辑交互
+    // =========================================
+    app.component('flow-diagram-card', {
+        props: [
+            'card',
+            'flowDiagramSettings',
+            'flowDiagramViewport',
+            'editingFlowDiagramStepId',
+            'flowDiagramDraftCaption',
+            'captionAnchor',
+            'captionX',
+            'captionPreview'
+        ],
+        emits: [
+            'toggle-hidden',
+            'start-edit',
+            'update:draft-caption',
+            'caption-keydown',
+            'commit-caption'
+        ],
+        template: `
+            <div style="position: relative; border: 1px solid #d1d5db; border-radius: 0; background: #fff; overflow: hidden; box-shadow: 0 6px 20px rgba(0,0,0,0.05);">
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid #ececec; background: #fafafa;">
+                    <div style="font-size: 12px; color: #666;">
+                        Step {{ card.index }}
+                    </div>
+                    <button class="btn btn-small" style="margin: 0; background: #fff; color: #444; border: 1px solid #cfd6de;" @click="$emit('toggle-hidden', card.stepId)">
+                        隐藏
+                    </button>
+                </div>
+
+                <div style="padding: 0;">
+                    <svg xmlns="http://www.w3.org/2000/svg" :viewBox="card.viewBox" preserveAspectRatio="none" width="100%" :height="flowDiagramViewport.height" style="display: block; background: #ffffff; border-radius: 0;">
+                        <g>
+                            <path v-for="path in card.paths" :key="path.id" :d="path.d" :fill="path.fill"></path>
+                        </g>
+                    </svg>
+                </div>
+
+                <div v-if="flowDiagramSettings.showCaption" style="position: relative; border-top: 1px solid #ececec; background: #fff;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="100%" height="64" viewBox="0 0 300 64" style="display: block;">
+                        <text :x="captionX" y="36" :text-anchor="captionAnchor" :fill="flowDiagramSettings.fontColor" :font-family="flowDiagramSettings.fontFamily" :font-size="flowDiagramSettings.fontSize">
+                            {{ captionPreview }}
+                        </text>
+                    </svg>
+                    <div v-if="editingFlowDiagramStepId !== card.stepId" style="position: absolute; inset: 0; display: flex; align-items: stretch;">
+                        <button style="position: absolute; inset: 0; border: none; background: transparent; cursor: pointer;" @dblclick.stop="$emit('start-edit', card.stepId)" @click.stop title="双击编辑流程图文字"></button>
+                        <button class="btn btn-small" style="position: absolute; right: 10px; top: 10px; margin: 0; background: rgba(255,255,255,0.9); color: #333; border: 1px solid #d5dbe3;" @click.stop="$emit('start-edit', card.stepId)">修改</button>
+                    </div>
+                    <div v-else style="position: absolute; inset: 0; padding: 10px;">
+                        <input
+                            :data-flow-caption-input="card.stepId"
+                            :value="flowDiagramDraftCaption"
+                            :style="{ width: '100%', background: '#f8fafc', border: '1px solid #cbd5e1', color: '#111827', padding: '8px 10px', borderRadius: '4px', boxSizing: 'border-box', fontFamily: flowDiagramSettings.fontFamily, fontSize: flowDiagramSettings.fontSize + 'px' }"
+                            @input="$emit('update:draft-caption', $event.target.value)"
+                            @keydown="$emit('caption-keydown', $event)"
+                            @blur="$emit('commit-caption')"
+                        >
+                    </div>
+                </div>
+            </div>
+        `
+    });
+
+    // =========================================
+    // 组件 5: 流程图画板容器
+    // 负责流程图头部、状态提示、隐藏步骤列表与子图网格容器
+    // =========================================
+    app.component('flow-diagram-board', {
+        props: [
+            'boardStyle',
+            'gridStyle',
+            'summaryText',
+            'cards',
+            'hiddenSteps',
+            'settings',
+            'isGenerating',
+            'isDirty',
+            'generationError'
+        ],
+        emits: ['refresh', 'show-step'],
+        template: `
+            <div :style="boardStyle">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
+                    <div>
+                        <h3 style="margin: 0; color: #222;">流程图视图</h3>
+                        <p style="margin: 6px 0 0; color: #666; font-size: 13px;">
+                            当前状态：{{ summaryText }}，可见 {{ cards.length }} 张，隐藏 {{ hiddenSteps.length }} 张
+                        </p>
+                    </div>
+                    <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                        <span style="font-size: 12px; color: #666;">每行 {{ settings.itemsPerRow }} 张</span>
+                        <span style="font-size: 12px; color: #666;">文字 {{ settings.showCaption ? '显示' : '隐藏' }}</span>
+                        <span style="font-size: 12px; color: #666;">质量 {{ settings.quality }}</span>
+                        <button class="btn btn-small" style="margin: 0;" :disabled="isGenerating" @click="$emit('refresh')">
+                            {{ isGenerating ? '生成中...' : '刷新流程图' }}
+                        </button>
+                    </div>
+                </div>
+
+                <div v-if="generationError" style="margin-bottom: 16px; padding: 12px 14px; border-radius: 8px; background: #fff3f3; border: 1px solid #efb8b8; color: #9b2c2c;">
+                    {{ generationError }}
+                </div>
+
+                <div v-if="isDirty && !isGenerating" style="margin-bottom: 16px; padding: 12px 14px; border-radius: 8px; background: #fff8e6; border: 1px solid #ecd6a1; color: #8a6116;">
+                    流程图结果尚未刷新。当前的步骤几何、质量档位或变量已经变化，请点击“刷新流程图”重新生成。
+                </div>
+
+                <div v-if="hiddenSteps.length" style="margin-bottom: 16px; padding: 14px; border-radius: 10px; background: #ffffff; border: 1px solid #e6e6e6;">
+                    <div style="font-size: 13px; color: #666; margin-bottom: 10px;">已隐藏步骤</div>
+                    <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                        <button v-for="item in hiddenSteps" :key="'flow-hidden-' + item.step.id" class="btn btn-small" style="margin: 0; background: #fff; color: #333; border: 1px solid #c9d0d8;" @click="$emit('show-step', item.step.id)">
+                            恢复 {{ item.index }}. {{ item.step.name }}
+                        </button>
+                    </div>
+                </div>
+
+                <div v-if="!cards.length && !isGenerating" style="border: 1px dashed #bbb; border-radius: 10px; padding: 24px; background: #fff; color: #666; text-align: center;">
+                    当前没有可展示的流程图子图。你可以点击“刷新流程图”重新生成，或者恢复被隐藏的步骤。
+                </div>
+
+                <div v-else :style="gridStyle">
+                    <slot></slot>
+                </div>
+            </div>
+        `
+    });
 }

@@ -1,19 +1,126 @@
 // canvas.js - 负责处理画布相关的视图计算、缩放、平移等控制逻辑
 
+function buildSectionPathData(engineResult, processSteps, options = {}) {
+    let paths = [];
+    if (!engineResult || !engineResult.profiles || !processSteps) return paths;
+
+    let profiles = engineResult.profiles;
+    let minX = engineResult.minX;
+    let gridWidth = engineResult.gridWidth;
+    let GRID_RES = engineResult.GRID_RES || 1;
+    let subL = engineResult.subLeft !== undefined ? engineResult.subLeft : -2000;
+    let subR = engineResult.subRight !== undefined ? engineResult.subRight : 2000;
+    const includeHidden = options.includeHidden === true;
+    const idPrefix = options.idPrefix || '';
+    const stepFilter = typeof options.stepFilter === 'function' ? options.stepFilter : null;
+    const yBase = options.yBase !== undefined ? options.yBase : 500;
+    const clipXMin = typeof options.clipXMin === 'number' ? options.clipXMin : null;
+    const clipXMax = typeof options.clipXMax === 'number' ? options.clipXMax : null;
+    const mapPoint = typeof options.mapPoint === 'function' ? options.mapPoint : null;
+
+    if (!profiles || profiles.length === 0 || !processSteps.length) return paths;
+
+    processSteps.forEach((step, idx) => {
+        if (step.type === 'etch' || step.type === 'cmp') return;
+        if (!includeHidden && !step.visible) return;
+        if (stepFilter && !stepFilter(step, idx)) return;
+
+        const bottomProf = profiles[idx];
+        const topProf = profiles[idx + 1];
+        if (!bottomProf || !topProf) return;
+
+        const thickness = Number(step.thickness) || 0;
+        const angle = Number(step.angle) || 90;
+        const rad = angle * Math.PI / 180;
+        const taperHalf = angle < 90 && thickness > 0 ? (thickness / 2) / Math.tan(rad) : 0;
+
+        if (!step.patterns) return;
+        step.patterns.forEach((p, pIdx) => {
+            let pStartX = minX;
+            let pEndX = minX + (gridWidth - 1) / GRID_RES;
+
+            if (idx !== 0 && (!step.name || !step.name.includes('ILD'))) {
+                pStartX = Math.max(subL, Math.floor(p.x - p.w / 2 - taperHalf - 5));
+                pEndX = Math.min(subR, Math.ceil(p.x + p.w / 2 + taperHalf + 5));
+            }
+            if (clipXMin !== null) pStartX = Math.max(clipXMin, pStartX);
+            if (clipXMax !== null) pEndX = Math.min(clipXMax, pEndX);
+
+            let iStart = Math.max(0, Math.floor((pStartX - minX) * GRID_RES));
+            let iEnd = Math.min(gridWidth - 1, Math.ceil((pEndX - minX) * GRID_RES));
+
+            let topPoints = [];
+            for (let i = iStart; i <= iEnd; i++) {
+                let x = minX + i / GRID_RES;
+                let y = topProf[i];
+                for (let n = idx + 2; n < profiles.length; n++) {
+                    y = Math.min(y, profiles[n][i]);
+                }
+                let vy = yBase - y;
+                const mapped = mapPoint ? mapPoint(x, vy) : { x, y: vy };
+
+                if (topPoints.length >= 2) {
+                    let p1 = topPoints[topPoints.length - 1];
+                    let p0 = topPoints[topPoints.length - 2];
+                    if (Math.abs((p1.x - p0.x) * (mapped.y - p1.y) - (mapped.x - p1.x) * (p1.y - p0.y)) <= 1e-3) {
+                        topPoints[topPoints.length - 1] = mapped;
+                        continue;
+                    }
+                }
+                topPoints.push(mapped);
+            }
+
+            let bottomPoints = [];
+            for (let i = iEnd; i >= iStart; i--) {
+                let x = minX + i / GRID_RES;
+                let y = bottomProf[i];
+                for (let n = idx + 1; n < profiles.length; n++) {
+                    y = Math.min(y, profiles[n][i]);
+                }
+                let vy = yBase - y;
+                const mapped = mapPoint ? mapPoint(x, vy) : { x, y: vy };
+
+                if (bottomPoints.length >= 2) {
+                    let p1 = bottomPoints[bottomPoints.length - 1];
+                    let p0 = bottomPoints[bottomPoints.length - 2];
+                    if (Math.abs((p1.x - p0.x) * (mapped.y - p1.y) - (mapped.x - p1.x) * (p1.y - p0.y)) <= 1e-3) {
+                        bottomPoints[bottomPoints.length - 1] = mapped;
+                        continue;
+                    }
+                }
+                bottomPoints.push(mapped);
+            }
+
+            let d = [];
+            topPoints.forEach((pt, ti) => { d.push(`${ti === 0 ? 'M' : 'L'} ${pt.x} ${pt.y}`); });
+            bottomPoints.forEach(pt => { d.push(`L ${pt.x} ${pt.y}`); });
+            d.push('Z');
+
+            if (d.length <= 2) return;
+
+            paths.push({
+                id: `${idPrefix}${step.id}-${pIdx}`,
+                d: d.join(' '),
+                fill: step.color,
+                idx: idx,
+                pIdx: pIdx
+            });
+        });
+    });
+
+    return paths;
+}
+
+window.buildSectionPathData = buildSectionPathData;
+
 function useCanvas(engineResult, triggerResize, processSteps, activeLayerIndex, hoverLayerIndex, hoverPatternIndex, focusedPatternIndex, flashingPatternIndex, hoverCardPatternIndex) {
     const { ref, computed } = Vue;
 
-    // =========================================
-    // 1. 画布缩放与平移状态
-    // =========================================
     const currentZoom = ref(100);
     const pan = ref({ x: 0, y: 0 });
     let isPanning = false;
     let lastMouse = { x: 0, y: 0 };
 
-    // =========================================
-    // 2. 交互操作：鼠标平移处理
-    // =========================================
     const startPan = (e) => {
         isPanning = true;
         lastMouse = { x: e.clientX, y: e.clientY };
@@ -22,7 +129,7 @@ function useCanvas(engineResult, triggerResize, processSteps, activeLayerIndex, 
     const doPan = (e) => {
         if (!isPanning) return;
         const _zoom = parseInt(currentZoom.value, 10);
-        
+
         if (_zoom <= 100) {
             pan.value.x = 0;
             pan.value.y = 0;
@@ -34,11 +141,11 @@ function useCanvas(engineResult, triggerResize, processSteps, activeLayerIndex, 
         const container = document.querySelector('.canvas-container');
         const cw = container ? container.clientWidth : 800;
         const ch = container ? container.clientHeight : 600;
-        
+
         const maxH = engineResult.value.fullMaxH !== undefined ? engineResult.value.fullMaxH : engineResult.value.maxH;
         const baseW = (engineResult.value.subRight - engineResult.value.subLeft) + 200;
         const baseH = maxH + 300;
-        
+
         const maxRatio = Math.max(baseW / cw, baseH / ch);
         const scale = maxRatio / (_zoom / 100);
 
@@ -56,10 +163,6 @@ function useCanvas(engineResult, triggerResize, processSteps, activeLayerIndex, 
         pan.value.y = 0;
     };
 
-    // =========================================
-    // 3. 画布坐标轴元素计算
-    // =========================================
-    // 绘制基于物理尺寸的坐标轴
     const axisElements = computed(() => {
         let elements = [];
         const subL = engineResult.value.subLeft || -400;
@@ -85,24 +188,20 @@ function useCanvas(engineResult, triggerResize, processSteps, activeLayerIndex, 
         return elements;
     });
 
-    // =========================================
-    // 4. ViewBox 映射逻辑：将物理坐标轴缩放和平移绑定到 SVG 视口
-    // =========================================
-    // 计算 SVG viewBox 物理坐标映射
     const viewBox = computed(() => {
-        const _trig = triggerResize.value; // 用于强制更新的依赖
+        const _trig = triggerResize.value;
         const _zoom = parseInt(currentZoom.value, 10);
-        
+
         const container = document.querySelector('.canvas-container');
         const cw = container ? container.clientWidth : 800;
         const ch = container ? container.clientHeight : 600;
-        
+
         const subL = engineResult.value.subLeft;
         const subR = engineResult.value.subRight;
         const maxH = engineResult.value.fullMaxH !== undefined ? engineResult.value.fullMaxH : engineResult.value.maxH;
 
         const baseW = (subR - subL) + 200;
-        const baseH = maxH + 300; 
+        const baseH = maxH + 300;
         const maxRatio = Math.max(baseW / cw, baseH / ch);
 
         const VBW = (cw * maxRatio) / (_zoom / 100);
@@ -113,105 +212,12 @@ function useCanvas(engineResult, triggerResize, processSteps, activeLayerIndex, 
 
         const X = centerX - pan.value.x - (VBW / 2);
         const Y = centerY - pan.value.y - (VBH / 2);
-        
+
         return `${X} ${Y} ${VBW} ${VBH}`;
     });
 
-    // =========================================
-    // 5. 核心渲染路径：SVG Path 生成
-    // 将 engine.js 计算出的高度场 (profiles) 转换为可以带填充色的多边形
-    // =========================================
-    const basePathData = computed(() => {
-        let paths = [];
-        if (!engineResult.value || !engineResult.value.profiles) return paths;
-        let profiles = engineResult.value.profiles;
-        let minX = engineResult.value.minX;
-        let gridWidth = engineResult.value.gridWidth;
-        let GRID_RES = engineResult.value.GRID_RES || 1;
-        let subL = engineResult.value.subLeft !== undefined ? engineResult.value.subLeft : -2000;
-        let subR = engineResult.value.subRight !== undefined ? engineResult.value.subRight : 2000;
+    const basePathData = computed(() => buildSectionPathData(engineResult.value, processSteps.value || []));
 
-        if (!profiles || profiles.length === 0 || !processSteps.value) return paths;
-
-        processSteps.value.forEach((step, idx) => {
-            if (step.type === 'etch' || step.type === 'cmp' || !step.visible) return;
-            
-            const bottomProf = profiles[idx];
-            const topProf = profiles[idx + 1];
-            if (!bottomProf || !topProf) return;
-
-            const rad = step.angle * Math.PI / 180;
-            const taperHalf = step.angle < 90 && step.thickness > 0 ? (step.thickness / 2) / Math.tan(rad) : 0;
-
-            if (!step.patterns) return;
-            step.patterns.forEach((p, pIdx) => {
-                let pStartX = minX;
-                let pEndX = minX + (gridWidth - 1) / GRID_RES;
-                
-                if (idx !== 0 && (!step.name || !step.name.includes('ILD'))) {
-                    pStartX = Math.max(subL, Math.floor(p.x - p.w/2 - taperHalf - 5));
-                    pEndX = Math.min(subR, Math.ceil(p.x + p.w/2 + taperHalf + 5));
-                }
-
-                // 计算物理坐标映射到分辨率网格数组的起始下标
-                let iStart = Math.max(0, Math.floor((pStartX - minX) * GRID_RES));
-                let iEnd = Math.min(gridWidth - 1, Math.ceil((pEndX - minX) * GRID_RES));
-
-                let topPoints = [];
-                for (let i = iStart; i <= iEnd; i++) {
-                    let x = minX + i / GRID_RES;
-                    let y = topProf[i];
-                    for (let n = idx + 2; n < profiles.length; n++) {
-                        y = Math.min(y, profiles[n][i]);
-                    }
-                    let vy = 500 - y;
-                    
-                    if (topPoints.length >= 2) {
-                        let p1 = topPoints[topPoints.length - 1];
-                        let p0 = topPoints[topPoints.length - 2];
-                        if (Math.abs((p1.x - p0.x) * (vy - p1.y) - (x - p1.x) * (p1.y - p0.y)) <= 1e-3) {
-                            topPoints[topPoints.length - 1] = {x, y: vy};
-                            continue;
-                        }
-                    }
-                    topPoints.push({x, y: vy});
-                }
-
-                let bottomPoints = [];
-                for (let i = iEnd; i >= iStart; i--) {
-                    let x = minX + i / GRID_RES;
-                    let y = bottomProf[i];
-                    for (let n = idx + 1; n < profiles.length; n++) {
-                        y = Math.min(y, profiles[n][i]);
-                    }
-                    let vy = 500 - y;
-                    
-                    if (bottomPoints.length >= 2) {
-                        let p1 = bottomPoints[bottomPoints.length - 1];
-                        let p0 = bottomPoints[bottomPoints.length - 2];
-                        if (Math.abs((p1.x - p0.x) * (vy - p1.y) - (x - p1.x) * (p1.y - p0.y)) <= 1e-3) {
-                            bottomPoints[bottomPoints.length - 1] = {x, y: vy};
-                            continue;
-                        }
-                    }
-                    bottomPoints.push({x, y: vy});
-                }
-
-                let d = [];
-                topPoints.forEach((pt, ti) => { d.push(`${ti === 0 ? 'M' : 'L'} ${pt.x} ${pt.y}`); });
-                bottomPoints.forEach(pt => { d.push(`L ${pt.x} ${pt.y}`); });
-                d.push('Z');
-                
-                if (d.length <= 2) return;
-
-                paths.push({ id: step.id + '-' + pIdx, d: d.join(' '), fill: step.color, idx: idx, pIdx: pIdx });
-            });
-        });
-
-        return paths;
-    });
-
-    // 分离高亮状态计算，防止由于鼠标移动引起的数万次坐标重运算卡顿
     const svgPaths = computed(() => {
         if (!basePathData.value) return [];
         return basePathData.value.map(p => {
@@ -242,7 +248,7 @@ function useCanvas(engineResult, triggerResize, processSteps, activeLayerIndex, 
         }
 
         if (!isArrow) return;
-        e.preventDefault(); 
+        e.preventDefault();
 
         const container = document.querySelector('.canvas-container');
         const cw = container ? container.clientWidth : 800;
@@ -253,7 +259,7 @@ function useCanvas(engineResult, triggerResize, processSteps, activeLayerIndex, 
         const scale = maxRatio / (_zoom / 100);
         const panStep = 30 * scale;
 
-        switch(e.key) {
+        switch (e.key) {
             case 'ArrowLeft': case 'a': pan.value.x += panStep; break;
             case 'ArrowRight': case 'd': pan.value.x -= panStep; break;
             case 'ArrowUp': case 'w': pan.value.y += panStep; break;

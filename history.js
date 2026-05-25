@@ -61,6 +61,8 @@ function useHistory(processSteps, variables, flowDiagramSettings) {
     };
 
     const getIsUndoing = () => isUndoing;
+    const canUndo = Vue.computed(() => historyIndex.value > 0);
+    const canRedo = Vue.computed(() => historyIndex.value < historyStack.value.length - 1);
 
     return { 
         historyStack, 
@@ -68,6 +70,8 @@ function useHistory(processSteps, variables, flowDiagramSettings) {
         pushHistory, 
         undo, 
         redo, 
-        getIsUndoing 
+        getIsUndoing,
+        canUndo,
+        canRedo
     };
 }

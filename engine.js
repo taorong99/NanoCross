@@ -4,8 +4,11 @@
 // =========================================
 // 核心函数：根据各步骤物理参数计算横截面轮廓 (Profiles)
 // =========================================
-window.calculateProfiles = function(steps) {
-    if (!steps || steps.length === 0) return { profiles: [], minX: 0, maxX: 0, gridWidth: 0, subLeft: 0, subRight: 0, maxH: 0 };
+window.calculateProfiles = function(steps, options = {}) {
+    const requestedGridRes = parseInt(options.gridRes, 10);
+    const resolvedGridRes = Number.isFinite(requestedGridRes) && requestedGridRes > 0 ? requestedGridRes : 10;
+
+    if (!steps || steps.length === 0) return { profiles: [], minX: 0, maxX: 0, gridWidth: 0, subLeft: 0, subRight: 0, maxH: 0, GRID_RES: resolvedGridRes };
 
     // 1. 初始化坐标系域 (网格和底图范围)
     let subLeft = -400, subRight = 400;
@@ -19,7 +22,7 @@ window.calculateProfiles = function(steps) {
     const minX = subLeft - 100; // Restore buffer to allow viewbox rendering correctly
     const maxX = subRight + 100;
     // 将物理单位转化为高分辨率亚像素数组，解决陡峭角度精度问题。在此折中降低为 10（原来50），以解决实时拖动滑条的性能卡顿问题。
-    const GRID_RES = 10; 
+    const GRID_RES = resolvedGridRes; 
     const gridWidth = (maxX - minX) * GRID_RES + 1;
     let profiles = [new Float32Array(gridWidth)]; 
 
