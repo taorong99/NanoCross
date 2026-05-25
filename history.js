@@ -1,6 +1,6 @@
 // history.js - 负责处理撤销、重做与历史记录栈的管理
 
-function useHistory(processSteps, variables) {
+function useHistory(processSteps, variables, flowDiagramSettings) {
     const { ref } = Vue;
     
     // =========================================
@@ -24,7 +24,8 @@ function useHistory(processSteps, variables) {
             }
             historyStack.value.push({
                 steps: JSON.parse(JSON.stringify(processSteps.value)),
-                vars: JSON.parse(JSON.stringify(variables.value))
+                vars: JSON.parse(JSON.stringify(variables.value)),
+                flowDiagramSettings: JSON.parse(JSON.stringify(flowDiagramSettings.value))
             });
             historyIndex.value++;
         }, 1000); // 延迟1000ms，让连续修改（如滑块拖动）只保存最后一次
@@ -41,6 +42,7 @@ function useHistory(processSteps, variables) {
             const state = historyStack.value[historyIndex.value];
             processSteps.value = JSON.parse(JSON.stringify(state.steps));
             variables.value = JSON.parse(JSON.stringify(state.vars));
+            flowDiagramSettings.value = JSON.parse(JSON.stringify(state.flowDiagramSettings));
             setTimeout(() => { isUndoing = false; }, 50);
         }
     };
@@ -53,6 +55,7 @@ function useHistory(processSteps, variables) {
             const state = historyStack.value[historyIndex.value];
             processSteps.value = JSON.parse(JSON.stringify(state.steps));
             variables.value = JSON.parse(JSON.stringify(state.vars));
+            flowDiagramSettings.value = JSON.parse(JSON.stringify(state.flowDiagramSettings));
             setTimeout(() => { isUndoing = false; }, 50);
         }
     };

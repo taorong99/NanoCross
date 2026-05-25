@@ -5,13 +5,16 @@ const App = {
     setup() {
         // 1. 获取各个模块的状态
         const store = useStore();
-        const history = useHistory(store.processSteps, store.variables);
+        const history = useHistory(store.processSteps, store.variables, store.flowDiagramSettings);
         
         // UI 交互状态
         const variablesMinimized = ref(false);
         const showExportMenu = ref(false);
         const showLegendSettingsModal = ref(false);
+        const showFlowDiagramSettingsModal = ref(false);
         const legendModalPosition = ref({ left: '50px', top: '100px' });
+        const FLOW_DIAGRAM_MODAL_WIDTH = 500;
+        const flowDiagramModalPosition = ref({ left: '56px', top: '80px' });
         
         const openLegendSettings = () => {
             // 每次打开设在视口中间偏上
@@ -19,6 +22,14 @@ const App = {
             legendModalPosition.value.left = Math.max(0, (winWidth - 500) / 2) + 'px';
             legendModalPosition.value.top = '100px';
             showLegendSettingsModal.value = true;
+        };
+
+        const openFlowDiagramSettings = () => {
+            const propertiesPanelRight = layersWidth.value + 6 + propsWidth.value;
+            const left = Math.max(20, propertiesPanelRight - FLOW_DIAGRAM_MODAL_WIDTH);
+            flowDiagramModalPosition.value.left = left + 'px';
+            flowDiagramModalPosition.value.top = '80px';
+            showFlowDiagramSettingsModal.value = true;
         };
 
         let dragInfo = { isDragging: false, startX: 0, startY: 0, initialLeft: 0, initialTop: 0 };
@@ -44,6 +55,29 @@ const App = {
             document.removeEventListener('mousemove', onDragLegendSettings);
             document.removeEventListener('mouseup', endDragLegendSettings);
         };
+        let flowDragInfo = { isDragging: false, startX: 0, startY: 0, initialLeft: 0, initialTop: 0 };
+        const startDragFlowDiagramSettings = (e) => {
+            flowDragInfo.isDragging = true;
+            flowDragInfo.startX = e.clientX;
+            flowDragInfo.startY = e.clientY;
+            flowDragInfo.initialLeft = parseInt(flowDiagramModalPosition.value.left) || 0;
+            flowDragInfo.initialTop = parseInt(flowDiagramModalPosition.value.top) || 0;
+
+            document.addEventListener('mousemove', onDragFlowDiagramSettings);
+            document.addEventListener('mouseup', endDragFlowDiagramSettings);
+        };
+        const onDragFlowDiagramSettings = (e) => {
+            if (!flowDragInfo.isDragging) return;
+            const dx = e.clientX - flowDragInfo.startX;
+            const dy = e.clientY - flowDragInfo.startY;
+            flowDiagramModalPosition.value.left = (flowDragInfo.initialLeft + dx) + 'px';
+            flowDiagramModalPosition.value.top = (flowDragInfo.initialTop + dy) + 'px';
+        };
+        const endDragFlowDiagramSettings = () => {
+            flowDragInfo.isDragging = false;
+            document.removeEventListener('mousemove', onDragFlowDiagramSettings);
+            document.removeEventListener('mouseup', endDragFlowDiagramSettings);
+        };
         const showPreviewModal = ref(false);
         const previewImageUrl = ref('');
         const previewFileName = ref('');
@@ -66,6 +100,13 @@ const App = {
             if (idx === -1) arr.push(id);
             else arr.splice(idx, 1);
         };
+
+        const visibleFlowDiagramSteps = computed(() => {
+            const hiddenIds = new Set(store.flowDiagramSettings.value.hiddenStepIds || []);
+            return store.processSteps.value
+                .map((step, index) => ({ step, index }))
+                .filter(({ step }) => !hiddenIds.has(step.id));
+        });
 
         // 图例数据计算，该计算属性根据当前的引擎计算结果(位置)及图例设置动态生成图例元素的呈现位置参数
         const legendData = computed(() => {
@@ -176,6 +217,11 @@ const App = {
 
         watch(store.processSteps, updateSimulation, { deep: true });
         watch(store.variables, updateSimulation, { deep: true });
+        watch(store.flowDiagramSettings, () => {
+            if (!history.getIsUndoing()) {
+                history.pushHistory();
+            }
+        }, { deep: true });
 
         // 只重置聚焦状态
         watch(store.activeLayerIndex, () => {
@@ -432,7 +478,7 @@ const App = {
                 store.variables.value = data.variables;
             }
             if (data.processSteps && Array.isArray(data.processSteps)) {
-                store.processSteps.value = data.processSteps;
+                store.processSteps.value = data.processSteps.map(store.normalizeProcessStep);
                 store.activeLayerIndex.value = Math.max(0, data.processSteps.length - 1);
                 if (history && history.pushHistory) {
                     setTimeout(history.pushHistory, 100);
@@ -443,6 +489,7 @@ const App = {
             if (data.legendSettings) {
                 Object.assign(store.legendSettings.value, data.legendSettings);
             }
+            store.flowDiagramSettings.value = store.normalizeFlowDiagramSettings(data.flowDiagramSettings);
         };
 
         const saveFile = async () => {
@@ -461,7 +508,8 @@ const App = {
                 projectName: nameToSave,
                 variables: store.variables.value,
                 processSteps: store.processSteps.value,
-                legendSettings: store.legendSettings.value
+                legendSettings: store.legendSettings.value,
+                flowDiagramSettings: store.flowDiagramSettings.value
             };
 
             let useLocal = false;
@@ -499,12 +547,14 @@ const App = {
             ...store,
             ...canvasProps,
             legendData,
+            visibleFlowDiagramSteps,
             history,
             loadFile,
             saveFile,
             exportFile,
             showExportMenu,
             showLegendSettingsModal,
+            showFlowDiagramSettingsModal,
             showPreviewModal,
             previewImageUrl,
             confirmDownloadPng,
@@ -512,8 +562,11 @@ const App = {
             mainSvgRef,
             toggleLegendLayer,
             legendModalPosition,
+            flowDiagramModalPosition,
             openLegendSettings,
+            openFlowDiagramSettings,
             startDragLegendSettings,
+            startDragFlowDiagramSettings,
             undo: history.undo,
             redo: history.redo,
             canUndo: history.canUndo,

@@ -143,7 +143,7 @@
              <div style="position: absolute; top: 20px; left: 20px; z-index: 100; display: flex; flex-direction: column; gap: 8px;">
                  <button class="btn btn-small floating-btn" @click.stop="loadFile">加载</button>
                  <button class="btn btn-small floating-btn" @click.stop="saveFile">保存</button>
-                   <div style="position: relative;" @mouseleave="showExportMenu = false">
+                   <div v-if="viewMode === 'main'" style="position: relative;" @mouseleave="showExportMenu = false">
                        <button class="btn btn-small floating-btn" style="width: 100%; margin: 0;" @mouseenter="showExportMenu = true" @click.stop="showExportMenu = !showExportMenu">导出▾</button>
                        <div v-show="showExportMenu" style="position: absolute; top: 100%; left: 0; z-index: 200; padding-top: 4px; min-width: 80px; width: 100%;">
                            <div style="background: #333; border: 1px solid #555; border-radius: 4px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 2px 8px rgba(0,0,0,0.5);">
@@ -153,6 +153,14 @@
                        </div>
                    </div>
                </div>
+
+             <div style="position: absolute; left: 20px; bottom: 20px; z-index: 100; display: flex; flex-direction: column; gap: 8px;">
+                 <button v-if="viewMode === 'flowDiagram'" class="btn btn-small floating-btn" @click.stop="openFlowDiagramSettings">流程图设置</button>
+                 <div style="display: flex; gap: 6px;">
+                     <button class="btn btn-small floating-btn" :style="viewMode === 'main' ? { background: '#4A90E2', color: '#fff', border: '1px solid #4A90E2' } : { background: '#ffffff', color: '#333', border: '1px solid #bfc7d1' }" @click.stop="viewMode = 'main'">主视图</button>
+                     <button class="btn btn-small floating-btn" :style="viewMode === 'flowDiagram' ? { background: '#4A90E2', color: '#fff', border: '1px solid #4A90E2' } : { background: '#ffffff', color: '#333', border: '1px solid #bfc7d1' }" @click.stop="viewMode = 'flowDiagram'">流程图</button>
+                 </div>
+             </div>
 
                <!-- 画布居中上方的项目名称 -->
              <div style="position: absolute; top: 20px; left: 50%; transform: translateX(-50%); z-index: 100; text-align: center;" @mousedown.stop>
@@ -177,7 +185,7 @@
                  </div>
              </div>
 
-              <svg ref="mainSvgRef" class="main-svg" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" v-bind="{ viewBox: viewBox }" style="position: absolute; top: 0; left: 0;">
+              <svg v-show="viewMode === 'main'" ref="mainSvgRef" class="main-svg" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" v-bind="{ viewBox: viewBox }" style="position: absolute; top: 0; left: 0;">
                 <defs>
                    <clipPath id="substrateClip">
                        <rect v-if="processSteps.length > 0 && processSteps[0].patterns && processSteps[0].patterns.length > 0" 
@@ -247,9 +255,41 @@
                     </g>
                 </g>
              </svg>
+
+             <div v-if="viewMode === 'flowDiagram'" style="position: absolute; inset: 0; padding: 96px 24px 24px; overflow: auto; background: #f4f4f4;" @mousedown.stop>
+                 <div :style="{ background: flowDiagramSettings.boardBackground, padding: flowDiagramSettings.boardPadding + 'px', minHeight: '100%', boxSizing: 'border-box', borderRadius: '8px' }">
+                     <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
+                         <div>
+                             <h3 style="margin: 0; color: #222;">流程图视图</h3>
+                             <p style="margin: 6px 0 0; color: #666; font-size: 13px;">Phase 1 占位：流程图管线尚未接入，当前仅用于配置、保存与后续渲染入口。</p>
+                         </div>
+                         <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                             <span style="font-size: 12px; color: #666;">每行 {{ flowDiagramSettings.itemsPerRow }} 张</span>
+                             <span style="font-size: 12px; color: #666;">文字 {{ flowDiagramSettings.showCaption ? '显示' : '隐藏' }}</span>
+                             <span style="font-size: 12px; color: #666;">质量 {{ flowDiagramSettings.quality }}</span>
+                         </div>
+                     </div>
+
+                     <div style="border: 1px dashed #bbb; border-radius: 10px; padding: 18px; background: #fff;">
+                         <div style="margin-bottom: 14px; color: #555; font-size: 13px;">
+                             当前可见流程图步骤数：{{ visibleFlowDiagramSteps.length }}
+                         </div>
+                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px;">
+                             <div v-for="item in visibleFlowDiagramSteps" :key="'flow-placeholder-' + item.step.id" style="border: 1px solid #ddd; border-radius: 10px; background: #fafafa; overflow: hidden;">
+                                 <div style="height: 120px; background: linear-gradient(180deg, #fefefe 0%, #f0f0f0 100%); display: flex; align-items: center; justify-content: center; color: #888; font-size: 13px;">
+                                     子图占位
+                                 </div>
+                                 <div v-if="flowDiagramSettings.showCaption" :style="{ padding: '10px 12px', textAlign: flowDiagramSettings.textAlign, color: flowDiagramSettings.fontColor, fontFamily: flowDiagramSettings.fontFamily, fontSize: flowDiagramSettings.fontSize + 'px', borderTop: '1px solid #e5e5e5', background: '#fff' }">
+                                     {{ item.step.flowDiagramCaption || item.step.name }}
+                                 </div>
+                             </div>
+                         </div>
+                     </div>
+                 </div>
+             </div>
              
              <!--缩放控件-->
-             <div class="controls-overlay" @mousedown.stop>
+             <div v-if="viewMode === 'main'" class="controls-overlay" @mousedown.stop>
                  <span style="font-size: 14px; color: #ccc;">缩放: {{ currentZoom }}%</span>
                  <input type="range" v-model.number="currentZoom" min="10" max="300" style="width: 100px;">
                  <button class="btn btn-small" style="margin:0; background: #444;" @click="resetZoom">复原</button>
@@ -349,6 +389,106 @@
                      
                      <div class="modal-actions" style="margin-top: 10px;">
                          <button class="btn btn-primary" @click="showLegendSettingsModal = false" style="width: 100%;">确定</button>
+                     </div>
+                 </div>
+             </div>
+
+             <!-- 流程图设置模态框 -->
+             <div v-if="showFlowDiagramSettingsModal" style="position: fixed; z-index: 1000;" :style="{ left: flowDiagramModalPosition.left, top: flowDiagramModalPosition.top }" @mousedown.stop>
+                 <div class="modal-content" style="max-width: 500px; padding: 20px; margin: 0; box-shadow: 0 5px 20px rgba(0,0,0,0.5); border: 1px solid #444;">
+                     <div class="modal-header" style="cursor: move; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;" @mousedown="startDragFlowDiagramSettings">
+                         <h3 style="margin: 0; user-select: none;">流程图设置</h3>
+                         <button class="btn btn-small" @click="showFlowDiagramSettingsModal = false" style="margin: 0;">✕</button>
+                     </div>
+
+                     <div class="form-group" style="display: flex; gap: 15px; margin-bottom: 12px;">
+                         <div style="flex: 1;">
+                             <label>每行展示几张图</label>
+                             <input type="number" min="1" v-model.number="flowDiagramSettings.itemsPerRow" class="form-control">
+                         </div>
+                         <div style="flex: 1;">
+                             <label>质量档位</label>
+                             <select v-model="flowDiagramSettings.quality" class="form-control">
+                                 <option value="draft">draft</option>
+                                 <option value="balanced">balanced</option>
+                                 <option value="high">high</option>
+                             </select>
+                         </div>
+                     </div>
+
+                     <div class="form-group" style="margin-bottom: 12px;">
+                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                             <input type="checkbox" v-model="flowDiagramSettings.showCaption">
+                             <span style="font-weight: bold; color: #4A90E2;">显示子图文字</span>
+                         </label>
+                     </div>
+
+                     <div class="form-group" style="margin-bottom: 12px;">
+                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                             <input type="checkbox" v-model="flowDiagramSettings.autoRefresh">
+                             <span style="font-weight: bold; color: #4A90E2;">自动刷新流程图</span>
+                         </label>
+                     </div>
+
+                     <div class="form-group" style="display: flex; gap: 15px; margin-bottom: 12px;">
+                         <div style="flex: 1;">
+                             <label>字体</label>
+                             <select v-model="flowDiagramSettings.fontFamily" class="form-control">
+                                 <option value="Arial">Arial</option>
+                                 <option value="Helvetica">Helvetica</option>
+                                 <option value="Times New Roman">Times New Roman</option>
+                                 <option value="Courier New">Courier New</option>
+                                 <option value="Verdana">Verdana</option>
+                                 <option value="Georgia">Georgia</option>
+                                 <option value="'Microsoft YaHei'">微软雅黑</option>
+                                 <option value="SimSun">宋体</option>
+                             </select>
+                         </div>
+                         <div style="flex: 1;">
+                             <label>字体大小</label>
+                             <input type="number" min="8" v-model.number="flowDiagramSettings.fontSize" class="form-control">
+                         </div>
+                     </div>
+
+                     <div class="form-group" style="display: flex; gap: 15px; margin-bottom: 12px;">
+                         <div style="flex: 1;">
+                             <label>字体颜色</label>
+                             <input type="color" v-model="flowDiagramSettings.fontColor" class="form-control" style="height: 38px; padding: 2px;">
+                         </div>
+                         <div style="flex: 1;">
+                             <label>文字对齐</label>
+                             <select v-model="flowDiagramSettings.textAlign" class="form-control">
+                                 <option value="left">left</option>
+                                 <option value="center">center</option>
+                                 <option value="right">right</option>
+                             </select>
+                         </div>
+                     </div>
+
+                     <div class="form-group" style="display: flex; gap: 15px; margin-bottom: 12px;">
+                         <div style="flex: 1;">
+                             <label>横向间距</label>
+                             <input type="number" min="0" v-model.number="flowDiagramSettings.gapX" class="form-control">
+                         </div>
+                         <div style="flex: 1;">
+                             <label>纵向间距</label>
+                             <input type="number" min="0" v-model.number="flowDiagramSettings.gapY" class="form-control">
+                         </div>
+                     </div>
+
+                     <div class="form-group" style="display: flex; gap: 15px; margin-bottom: 20px;">
+                         <div style="flex: 1;">
+                             <label>整体内边距</label>
+                             <input type="number" min="0" v-model.number="flowDiagramSettings.boardPadding" class="form-control">
+                         </div>
+                         <div style="flex: 1;">
+                             <label>背景颜色</label>
+                             <input type="color" v-model="flowDiagramSettings.boardBackground" class="form-control" style="height: 38px; padding: 2px;">
+                         </div>
+                     </div>
+
+                     <div class="modal-actions" style="margin-top: 10px;">
+                         <button class="btn btn-primary" @click="showFlowDiagramSettingsModal = false" style="width: 100%;">确定</button>
                      </div>
                  </div>
              </div>

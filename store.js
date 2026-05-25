@@ -3,17 +3,50 @@
 function useStore() {
     const { ref, computed } = Vue;
 
+    const createDefaultFlowDiagramSettings = () => ({
+        itemsPerRow: 4,
+        showCaption: true,
+        fontFamily: 'Arial',
+        fontSize: 14,
+        fontColor: '#000000',
+        textAlign: 'center',
+        gapX: 24,
+        gapY: 24,
+        boardPadding: 20,
+        boardBackground: '#ffffff',
+        quality: 'draft',
+        autoRefresh: false,
+        hiddenStepIds: []
+    });
+
+    const normalizeFlowDiagramSettings = (settings) => {
+        const defaults = createDefaultFlowDiagramSettings();
+        const merged = { ...defaults, ...(settings || {}) };
+        const parsedItemsPerRow = parseInt(merged.itemsPerRow, 10);
+        merged.itemsPerRow = Number.isFinite(parsedItemsPerRow) && parsedItemsPerRow > 0 ? parsedItemsPerRow : defaults.itemsPerRow;
+        merged.hiddenStepIds = Array.isArray(merged.hiddenStepIds) ? [...merged.hiddenStepIds] : [];
+        if (!['draft', 'balanced', 'high'].includes(merged.quality)) {
+            merged.quality = defaults.quality;
+        }
+        return merged;
+    };
+
+    const normalizeProcessStep = (step) => ({
+        ...step,
+        flowDiagramCaption: typeof step?.flowDiagramCaption === 'string' ? step.flowDiagramCaption : ''
+    });
+
     // =========================================
     // 1. 核心状态与默认数据
     // =========================================
     // 默认工艺步骤
     const processSteps = ref([
-        { id: 1, name: 'Substrate', type: 'deposit', thickness: 40, angle: 90, color: '#bdc3c7', visible: true, patterns: [{ x: 0, w: 600 }] },
-        { id: 2, name: 'M1 (CPW)', type: 'deposit', thickness: 30, angle: 75, color: '#f1c40f', visible: true, patterns: [{ x: -120, w: 60 }, { x: 0, w: 60 }, { x: 120, w: 60 }] },
-        { id: 3, name: 'ILD 1', type: 'deposit', thickness: 80, angle: 90, color: 'rgba(52, 152, 219, 0.4)', visible: true, patterns: [{ x: 0, w: 600 }] },
-        { id: 4, name: 'Via 1', type: 'etch', thickness: 80, angle: 85, color: 'transparent', visible: true, patterns: [{ x: -120, w: 20 }, { x: 120, w: 20 }] },
-        { id: 5, name: 'M2 (Top)', type: 'deposit', thickness: 30, angle: 75, color: '#e67e22', visible: true, patterns: [{ x: 0, w: 350 }] },
-        { id: 6, name: 'CMP 平坦化', type: 'cmp', thickness: 10, angle: 90, color: 'transparent', visible: true, patterns: [] }
+        normalizeProcessStep({ id: 1, name: 'Substrate', type: 'deposit', thickness: 40, angle: 90, color: '#bdc3c7', visible: true, patterns: [{ x: 0, w: 600 }] }),
+        normalizeProcessStep({ id: 2, name: 'M1 (CPW)', type: 'deposit', thickness: 30, angle: 75, color: '#f1c40f', visible: true, patterns: [{ x: -120, w: 60 }, { x: 0, w: 60 }, { x: 120, w: 60 }] }),
+        normalizeProcessStep({ id: 3, name: 'ILD 1', type: 'deposit', thickness: 80, angle: 90, color: 'rgba(52, 152, 219, 0.4)', visible: true, patterns: [{ x: 0, w: 600 }] }),
+        normalizeProcessStep({ id: 4, name: 'Via 1', type: 'etch', thickness: 80, angle: 85, color: 'transparent', visible: true, patterns: [{ x: -120, w: 20 }, { x: 120, w: 20 }] }),
+        normalizeProcessStep({ id: 5, name: 'M2 (Top)', type: 'deposit', thickness: 30, angle: 75, color: '#e67e22', visible: true, patterns: [{ x: 0, w: 350 }] }),
+        normalizeProcessStep({ id: 6, name: 'CMP 平坦化', type: 'cmp', thickness: 10, angle: 90, color: 'transparent', visible: true, patterns: [] })
     ]);
 
     const variables = ref([
@@ -35,6 +68,9 @@ function useStore() {
         textSource: 'name', // 'name' 或 'material'
         hiddenLegendIds: [] // 不显示的图层ID列表
     });
+
+    const flowDiagramSettings = ref(createDefaultFlowDiagramSettings());
+    const viewMode = ref('main');
 
     const projectName = ref('');
 
@@ -115,13 +151,18 @@ function useStore() {
             angle: 90, 
             color: type === 'deposit' ? '#e74c3c' : 'transparent', 
             visible: true, 
-            patterns: newPatterns
+            patterns: newPatterns,
+            flowDiagramCaption: ''
         });
         activeLayerIndex.value = processSteps.value.length - 1;
     };
 
     const deleteStep = (idx) => {
         if (idx === 0) { alert("衬底是基础图案，不能删除！"); return; }
+        const removedStep = processSteps.value[idx];
+        if (removedStep) {
+            flowDiagramSettings.value.hiddenStepIds = flowDiagramSettings.value.hiddenStepIds.filter(id => id !== removedStep.id);
+        }
         processSteps.value.splice(idx, 1);
         activeLayerIndex.value = Math.max(0, activeLayerIndex.value - 1);
     };
@@ -137,10 +178,15 @@ function useStore() {
     };
 
     return {
+        createDefaultFlowDiagramSettings,
+        normalizeFlowDiagramSettings,
+        normalizeProcessStep,
         projectName,
         processSteps,
         variables,
         legendSettings,
+        flowDiagramSettings,
+        viewMode,
         activeLayerIndex,
         activeStep,
         engineResult,
