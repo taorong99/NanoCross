@@ -7,10 +7,8 @@ function useFlowDiagramPipeline(options) {
     const flowDiagramSettings = options.flowDiagramSettings;
     const viewMode = options.viewMode;
     const mainEngineResult = options.mainEngineResult;
-    const targetViewport = options.targetViewport;
     const stepMetaMap = options.stepMetaMap;
     const layoutMeta = options.layoutMeta;
-    const FLOW_DIAGRAM_MIN_VIEWPORT = 100;
     const FLOW_DIAGRAM_BATCH_SIZE = 2;
 
     const qualityGridMap = {
@@ -104,26 +102,8 @@ function useFlowDiagramPipeline(options) {
         });
     };
 
-    const getTargetViewport = () => {
-        const width = targetViewport && targetViewport.value && targetViewport.value.width ? targetViewport.value.width : 300;
-        const height = targetViewport && targetViewport.value && targetViewport.value.height ? targetViewport.value.height : 220;
-        return {
-            width: Math.max(FLOW_DIAGRAM_MIN_VIEWPORT, width),
-            height: Math.max(FLOW_DIAGRAM_MIN_VIEWPORT, height)
-        };
-    };
-
     const rebuildFlowDiagramLayout = () => {
         if (!allStepGeometry.value.length) return;
-        const snapshots = allStepGeometry.value.map(item => ({
-            stepIndex: item.stepIndex,
-            engineResult: item.engineResult,
-            quality: item.quality
-        }));
-        const scaleMeta = getScaleMeta(snapshots);
-        allStepGeometry.value = snapshots.map(snapshot =>
-            createSnapshotGeometry(snapshot.stepIndex, snapshot.engineResult, scaleMeta, snapshot.quality)
-        );
         rebuildItems();
     };
 
@@ -187,14 +167,11 @@ function useFlowDiagramPipeline(options) {
     const createSnapshotGeometry = (stepIndex, engineResult, scaleMeta, quality) => {
         const prefixSteps = parsedSteps.value.slice(0, stepIndex + 1).map(step => ({ ...step, visible: true }));
         const stepMeta = processSteps.value[stepIndex];
-        const viewport = getTargetViewport();
-        const targetWidth = viewport.width;
-        const targetHeight = viewport.height;
-        const scaleX = targetWidth / scaleMeta.viewBoxWidth;
-        const scaleY = targetHeight / scaleMeta.viewBoxHeight;
+        const normalizedWidth = Math.max(scaleMeta.viewBoxWidth, 1);
+        const normalizedHeight = Math.max(scaleMeta.viewBoxHeight, 1);
         const mapPoint = (x, y) => ({
-            x: (x - scaleMeta.viewBoxX) * scaleX,
-            y: (y - scaleMeta.viewBoxY) * scaleY
+            x: x - scaleMeta.viewBoxX,
+            y: y - scaleMeta.viewBoxY
         });
         const paths = typeof window.buildSectionPathData === 'function'
             ? window.buildSectionPathData(engineResult, prefixSteps, {
@@ -214,9 +191,9 @@ function useFlowDiagramPipeline(options) {
             engineResult,
             paths,
             quality,
-            viewBox: `0 0 ${targetWidth} ${targetHeight}`,
-            width: targetWidth,
-            height: targetHeight,
+            viewBox: `0 0 ${normalizedWidth} ${normalizedHeight}`,
+            normalizedWidth,
+            normalizedHeight,
             scaleMeta
         };
     };
@@ -343,12 +320,8 @@ function useFlowDiagramPipeline(options) {
         rebuildItems();
     });
 
-    watch(() => JSON.stringify(layoutMeta && layoutMeta.value ? layoutMeta.value : {}), () => {
+    watch(() => getEffectiveItemsPerRow(), () => {
         rebuildItems();
-    });
-
-    watch(() => JSON.stringify(getTargetViewport()), () => {
-        rebuildFlowDiagramLayout();
     });
 
     watch(viewMode, (mode) => {

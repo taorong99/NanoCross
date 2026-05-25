@@ -60,11 +60,6 @@ const App = {
                 height
             };
         });
-        const flowDiagramViewport = computed(() => ({
-            width: flowDiagramLayout.value.width,
-            height: flowDiagramLayout.value.height
-        }));
-
         const stepMetaMap = computed(() => {
             const map = new Map();
             store.processSteps.value.forEach((step, index) => {
@@ -79,7 +74,6 @@ const App = {
             flowDiagramSettings: store.flowDiagramSettings,
             viewMode: store.viewMode,
             mainEngineResult: store.engineResult,
-            targetViewport: flowDiagramViewport,
             stepMetaMap,
             layoutMeta: flowDiagramLayout
         });
@@ -418,15 +412,11 @@ const App = {
 
         watch([
             () => store.viewMode.value,
-            () => flowDiagramLayout.value.effectiveItemsPerRow,
-            () => store.flowDiagramSettings.value.gapX,
-            () => store.flowDiagramSettings.value.boardPadding,
             triggerResize
         ], () => {
             if (store.viewMode.value !== 'flowDiagram') return;
             nextTick(() => {
                 updateFlowDiagramBoardMetrics();
-                flowDiagramPipeline.rebuildFlowDiagramLayout();
             });
         });
 
@@ -443,7 +433,6 @@ const App = {
             if (store.viewMode.value === 'flowDiagram') {
                 nextTick(() => {
                     updateFlowDiagramBoardMetrics();
-                    flowDiagramPipeline.rebuildFlowDiagramLayout();
                 });
             }
         };
@@ -626,10 +615,10 @@ const App = {
             const gapY = Number(store.flowDiagramSettings.value.gapY) || 0;
             const captionHeight = store.flowDiagramSettings.value.showCaption ? 64 : 0;
             const cardHeaderHeight = 41;
-            const cardBodyHeight = flowDiagramViewport.value.height;
+            const cardBodyHeight = flowDiagramLayout.value.height;
             const cardHeight = cardHeaderHeight + cardBodyHeight + captionHeight;
             const itemsPerRow = Math.max(1, flowDiagramLayout.value.effectiveItemsPerRow || 1);
-            const cardWidth = Math.max(1, flowDiagramViewport.value.width);
+            const cardWidth = Math.max(1, flowDiagramLayout.value.width);
             const totalRows = cards.length ? Math.max(...cards.map(card => (card.rowIndex || 0))) + 1 : 0;
             const boardWidth = itemsPerRow * cardWidth + Math.max(0, itemsPerRow - 1) * gapX + boardPadding * 2;
             const cardsHeight = totalRows > 0 ? (totalRows * cardHeight) + Math.max(0, totalRows - 1) * gapY : 0;
@@ -656,11 +645,13 @@ const App = {
                 svgParts.push(`<rect x="0" y="0" width="${cardWidth}" height="${cardHeaderHeight}" fill="#fafafa" stroke="#ececec" stroke-width="1"/>`);
                 svgParts.push(`<text x="12" y="25" font-size="12" font-family="Arial" fill="#666666">${escapedStepName}</text>`);
                 svgParts.push(`<rect x="0" y="${cardHeaderHeight}" width="${cardWidth}" height="${cardBodyHeight}" fill="#ffffff"/>`);
-                svgParts.push(`<g transform="translate(0, ${cardHeaderHeight})">`);
+                svgParts.push(
+                    `<svg x="0" y="${cardHeaderHeight}" width="${cardWidth}" height="${cardBodyHeight}" viewBox="${card.viewBox}" preserveAspectRatio="none">`
+                );
                 card.paths.forEach(path => {
                     svgParts.push(`<path d="${path.d}" fill="${path.fill}"></path>`);
                 });
-                svgParts.push(`</g>`);
+                svgParts.push(`</svg>`);
 
                 if (store.flowDiagramSettings.value.showCaption) {
                     svgParts.push(`<line x1="0" y1="${cardHeaderHeight + cardBodyHeight}" x2="${cardWidth}" y2="${cardHeaderHeight + cardBodyHeight}" stroke="#ececec" stroke-width="1"/>`);
@@ -918,7 +909,6 @@ const App = {
             flowDiagramGridStyle,
             flowDiagramBoardStyle,
             flowDiagramSummaryText,
-            flowDiagramViewport,
             flowDiagramBoardRef,
             editingFlowDiagramStepId,
             flowDiagramDraftCaption,

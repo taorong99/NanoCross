@@ -129,7 +129,6 @@ function registerComponents(app) {
         props: [
             'card',
             'flowDiagramSettings',
-            'flowDiagramViewport',
             'editingFlowDiagramStepId',
             'flowDiagramDraftCaption',
             'captionAnchor',
@@ -155,7 +154,7 @@ function registerComponents(app) {
                 </div>
 
                 <div style="padding: 0;">
-                    <svg xmlns="http://www.w3.org/2000/svg" :viewBox="card.viewBox" preserveAspectRatio="none" width="100%" :height="flowDiagramViewport.height" style="display: block; background: #ffffff; border-radius: 0;">
+                    <svg xmlns="http://www.w3.org/2000/svg" :viewBox="card.viewBox" preserveAspectRatio="none" width="100%" style="display: block; aspect-ratio: 1 / 0.72; background: #ffffff; border-radius: 0;">
                         <g>
                             <path v-for="path in card.paths" :key="path.id" :d="path.d" :fill="path.fill"></path>
                         </g>
