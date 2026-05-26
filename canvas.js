@@ -20,6 +20,15 @@ function buildSectionPathData(engineResult, processSteps, options = {}) {
 
     if (!profiles || profiles.length === 0 || !processSteps.length) return paths;
 
+    const spansFullSubstrate = (pattern) => {
+        if (!pattern) return false;
+        const centerX = Number(pattern.x) || 0;
+        const width = Number(pattern.w) || 0;
+        const left = centerX - width / 2;
+        const right = centerX + width / 2;
+        return left <= subL + 1 && right >= subR - 1;
+    };
+
     processSteps.forEach((step, idx) => {
         if (step.type === 'etch' || step.type === 'cmp') return;
         if (!includeHidden && !step.visible) return;
@@ -35,11 +44,12 @@ function buildSectionPathData(engineResult, processSteps, options = {}) {
         const taperHalf = angle < 90 && thickness > 0 ? (thickness / 2) / Math.tan(rad) : 0;
 
         if (!step.patterns) return;
+        const rendersAcrossSubstrate = step.patterns.length === 1 && spansFullSubstrate(step.patterns[0]);
         step.patterns.forEach((p, pIdx) => {
             let pStartX = minX;
             let pEndX = minX + (gridWidth - 1) / GRID_RES;
 
-            if (idx !== 0 && (!step.name || !step.name.includes('ILD'))) {
+            if (idx !== 0 && !rendersAcrossSubstrate) {
                 pStartX = Math.max(subL, Math.floor(p.x - p.w / 2 - taperHalf - 5));
                 pEndX = Math.min(subR, Math.ceil(p.x + p.w / 2 + taperHalf + 5));
             }

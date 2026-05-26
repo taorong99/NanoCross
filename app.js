@@ -345,20 +345,34 @@ const App = {
             hoverCardPatternIndex
         );
 
-        const simulationSignature = computed(() => JSON.stringify({
-            steps: store.processSteps.value.map(step => ({
-                id: step.id,
-                type: step.type,
-                thickness: step.thickness,
-                angle: step.angle,
-                visible: step.visible,
-                patterns: (step.patterns || []).map(pattern => ({
-                    x: pattern.x,
-                    w: pattern.w
-                }))
-            })),
-            variables: store.variables.value
-        }));
+        const simulationDeps = computed(() => [
+            ...store.processSteps.value.map(step => [
+                step.id,
+                step.type,
+                step.thickness,
+                step.angle,
+                step.visible,
+                step.color,
+                ...(step.patterns || []).flatMap(pattern => [pattern.x, pattern.w])
+            ]),
+            ...store.variables.value.flatMap(variable => [variable.name, variable.value])
+        ]);
+
+        const processMetaDeps = computed(() => [
+            ...store.processSteps.value.map(step => [
+                step.id,
+                step.name,
+                step.material,
+                step.flowDiagramCaption,
+                step.visible
+            ]),
+            store.processSteps.value.length
+        ]);
+
+        const variableDeps = computed(() => [
+            ...store.variables.value.flatMap(variable => [variable.name, variable.value]),
+            store.variables.value.length
+        ]);
 
         const updateSimulation = () => {
             if (window.calculateProfiles) {
@@ -371,28 +385,22 @@ const App = {
             }
         };
 
-        watch(simulationSignature, () => {
+        watch(simulationDeps, () => {
             updateSimulation();
             if (!history.getIsUndoing()) {
                 history.pushHistory();
             }
-        });
-        watch(() => JSON.stringify(store.processSteps.value.map(step => ({
-            id: step.id,
-            name: step.name,
-            material: step.material,
-            flowDiagramCaption: step.flowDiagramCaption,
-            visible: step.visible
-        }))), () => {
+        }, { deep: true });
+        watch(processMetaDeps, () => {
             if (!history.getIsUndoing()) {
                 history.pushHistory();
             }
-        });
-        watch(() => JSON.stringify(store.variables.value), () => {
+        }, { deep: true });
+        watch(variableDeps, () => {
             if (!history.getIsUndoing()) {
                 history.pushHistory();
             }
-        });
+        }, { deep: true });
         watch(store.flowDiagramSettings, () => {
             if (!history.getIsUndoing()) {
                 history.pushHistory();

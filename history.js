@@ -2,6 +2,12 @@
 
 function useHistory(processSteps, variables, flowDiagramSettings) {
     const { ref } = Vue;
+    const cloneState = (value) => {
+        if (typeof structuredClone === 'function') {
+            return structuredClone(value);
+        }
+        return JSON.parse(JSON.stringify(value));
+    };
     
     // =========================================
     // 1. 历史栈及内部状态
@@ -23,9 +29,9 @@ function useHistory(processSteps, variables, flowDiagramSettings) {
                 historyStack.value = historyStack.value.slice(0, historyIndex.value + 1);
             }
             historyStack.value.push({
-                steps: JSON.parse(JSON.stringify(processSteps.value)),
-                vars: JSON.parse(JSON.stringify(variables.value)),
-                flowDiagramSettings: JSON.parse(JSON.stringify(flowDiagramSettings.value))
+                steps: cloneState(processSteps.value),
+                vars: cloneState(variables.value),
+                flowDiagramSettings: cloneState(flowDiagramSettings.value)
             });
             historyIndex.value++;
         }, 1000); // 延迟1000ms，让连续修改（如滑块拖动）只保存最后一次
@@ -40,9 +46,9 @@ function useHistory(processSteps, variables, flowDiagramSettings) {
             isUndoing = true;
             historyIndex.value--;
             const state = historyStack.value[historyIndex.value];
-            processSteps.value = JSON.parse(JSON.stringify(state.steps));
-            variables.value = JSON.parse(JSON.stringify(state.vars));
-            flowDiagramSettings.value = JSON.parse(JSON.stringify(state.flowDiagramSettings));
+            processSteps.value = cloneState(state.steps);
+            variables.value = cloneState(state.vars);
+            flowDiagramSettings.value = cloneState(state.flowDiagramSettings);
             setTimeout(() => { isUndoing = false; }, 50);
         }
     };
@@ -53,9 +59,9 @@ function useHistory(processSteps, variables, flowDiagramSettings) {
             isUndoing = true;
             historyIndex.value++;
             const state = historyStack.value[historyIndex.value];
-            processSteps.value = JSON.parse(JSON.stringify(state.steps));
-            variables.value = JSON.parse(JSON.stringify(state.vars));
-            flowDiagramSettings.value = JSON.parse(JSON.stringify(state.flowDiagramSettings));
+            processSteps.value = cloneState(state.steps);
+            variables.value = cloneState(state.vars);
+            flowDiagramSettings.value = cloneState(state.flowDiagramSettings);
             setTimeout(() => { isUndoing = false; }, 50);
         }
     };

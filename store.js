@@ -98,14 +98,22 @@ function useStore() {
             }
         });
         return processSteps.value.map(step => {
-            let newStep = { ...step };
-            if (step.patterns) {
-                newStep.patterns = step.patterns.map(p => ({
+            const parsedPatterns = step.patterns
+                ? step.patterns.map(p => ({
                     x: safeEval(p.x, scope),
                     w: safeEval(p.w, scope)
-                }));
-            }
-            return newStep;
+                }))
+                : [];
+
+            return {
+                id: step.id,
+                type: step.type,
+                thickness: safeEval(step.thickness, scope),
+                angle: safeEval(step.angle, scope),
+                color: step.color,
+                visible: step.visible,
+                patterns: parsedPatterns
+            };
         });
     };
 
