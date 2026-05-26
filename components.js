@@ -73,13 +73,43 @@ function registerComponents(app) {
     app.component('slider-input', {
         props: ['modelValue', 'min', 'max'],
         emits: ['update:modelValue'],
+        setup(props, { emit }) {
+            const localValue = ref(Number(props.modelValue) || 0);
+
+            watch(() => props.modelValue, (nextValue) => {
+                localValue.value = Number(nextValue) || 0;
+            });
+
+            const emitValue = (nextValue) => {
+                const normalized = Number(nextValue) || 0;
+                emit('update:modelValue', normalized);
+            };
+
+            const onRangeInput = (event) => {
+                const nextValue = Number(event.target.value) || 0;
+                localValue.value = nextValue;
+                emitValue(nextValue);
+            };
+
+            const onNumberInput = (event) => {
+                const nextValue = Number(event.target.value) || 0;
+                localValue.value = nextValue;
+                emitValue(nextValue);
+            };
+
+            return {
+                localValue,
+                onRangeInput,
+                onNumberInput
+            };
+        },
         template: `
             <div style="display: flex; gap: 5px; align-items: center; margin-top: 5px;">
                 <input type="range" :min="min" :max="max" 
-                       :value="modelValue" @input="$emit('update:modelValue', Number($event.target.value))" 
+                       :value="localValue" @input="onRangeInput" 
                        style="flex: 1; min-width: 0;">
                 <input type="number" 
-                       :value="modelValue" @input="$emit('update:modelValue', Number($event.target.value))" 
+                       :value="localValue" @input="onNumberInput" 
                        class="form-control" style="width: 50px; padding: 2px 4px;" @keyup.enter="$event.target.blur()">
             </div>
         `

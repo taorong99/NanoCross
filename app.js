@@ -35,6 +35,7 @@ const App = {
         const flowDiagramBoardWidth = ref(0);
         const FLOW_DIAGRAM_MIN_CARD_WIDTH = 100;
         const FLOW_DIAGRAM_MIN_CARD_HEIGHT = 100;
+        let simulationFrameHandle = null;
 
         const editingFlowDiagramStepId = ref(null);
         const flowDiagramDraftCaption = ref('');
@@ -352,7 +353,6 @@ const App = {
                 step.thickness,
                 step.angle,
                 step.visible,
-                step.color,
                 ...(step.patterns || []).flatMap(pattern => [pattern.x, pattern.w])
             ]),
             ...store.variables.value.flatMap(variable => [variable.name, variable.value])
@@ -377,16 +377,21 @@ const App = {
         const updateSimulation = () => {
             if (window.calculateProfiles) {
                 const parsed = store.getParsedSteps();
-                const currentResult = window.calculateProfiles(parsed);
-                const fullParsed = parsed.map(s => ({ ...s, visible: true }));
-                const fullResult = window.calculateProfiles(fullParsed);
-                currentResult.fullMaxH = fullResult.maxH;
+                const currentResult = window.calculateProfiles(parsed, { computeFullMaxH: true });
                 store.engineResult.value = currentResult;
             }
         };
 
+        const scheduleSimulationUpdate = () => {
+            if (simulationFrameHandle !== null) return;
+            simulationFrameHandle = window.requestAnimationFrame(() => {
+                simulationFrameHandle = null;
+                updateSimulation();
+            });
+        };
+
         watch(simulationDeps, () => {
-            updateSimulation();
+            scheduleSimulationUpdate();
             if (!history.getIsUndoing()) {
                 history.pushHistory();
             }
@@ -458,6 +463,10 @@ const App = {
         });
 
         onUnmounted(() => {
+            if (simulationFrameHandle !== null) {
+                window.cancelAnimationFrame(simulationFrameHandle);
+                simulationFrameHandle = null;
+            }
             window.removeEventListener('keydown', handleKeyDown);
             window.removeEventListener('mouseup', globalMouseUp);
             window.removeEventListener('mousemove', globalMouseMove);

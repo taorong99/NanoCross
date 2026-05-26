@@ -20,6 +20,32 @@ function buildSectionPathData(engineResult, processSteps, options = {}) {
 
     if (!profiles || profiles.length === 0 || !processSteps.length) return paths;
 
+    const suffixMinProfiles = new Array(profiles.length);
+    for (let profileIdx = profiles.length - 1; profileIdx >= 0; profileIdx--) {
+        const currentProfile = profiles[profileIdx];
+        if (!currentProfile) {
+            suffixMinProfiles[profileIdx] = null;
+            continue;
+        }
+
+        if (profileIdx === profiles.length - 1) {
+            suffixMinProfiles[profileIdx] = currentProfile;
+            continue;
+        }
+
+        const nextMinProfile = suffixMinProfiles[profileIdx + 1];
+        if (!nextMinProfile) {
+            suffixMinProfiles[profileIdx] = currentProfile;
+            continue;
+        }
+
+        const mergedProfile = new Float32Array(gridWidth);
+        for (let i = 0; i < gridWidth; i++) {
+            mergedProfile[i] = Math.min(currentProfile[i], nextMinProfile[i]);
+        }
+        suffixMinProfiles[profileIdx] = mergedProfile;
+    }
+
     const spansFullSubstrate = (pattern) => {
         if (!pattern) return false;
         const centerX = Number(pattern.x) || 0;
@@ -36,6 +62,8 @@ function buildSectionPathData(engineResult, processSteps, options = {}) {
 
         const bottomProf = profiles[idx];
         const topProf = profiles[idx + 1];
+        const clippedBottomProf = suffixMinProfiles[idx] || bottomProf;
+        const clippedTopProf = suffixMinProfiles[idx + 1] || topProf;
         if (!bottomProf || !topProf) return;
 
         const thickness = Number(step.thickness) || 0;
@@ -62,10 +90,7 @@ function buildSectionPathData(engineResult, processSteps, options = {}) {
             let topPoints = [];
             for (let i = iStart; i <= iEnd; i++) {
                 let x = minX + i / GRID_RES;
-                let y = topProf[i];
-                for (let n = idx + 2; n < profiles.length; n++) {
-                    y = Math.min(y, profiles[n][i]);
-                }
+                let y = clippedTopProf[i];
                 let vy = yBase - y;
                 const mapped = mapPoint ? mapPoint(x, vy) : { x, y: vy };
 
@@ -83,10 +108,7 @@ function buildSectionPathData(engineResult, processSteps, options = {}) {
             let bottomPoints = [];
             for (let i = iEnd; i >= iStart; i--) {
                 let x = minX + i / GRID_RES;
-                let y = bottomProf[i];
-                for (let n = idx + 1; n < profiles.length; n++) {
-                    y = Math.min(y, profiles[n][i]);
-                }
+                let y = clippedBottomProf[i];
                 let vy = yBase - y;
                 const mapped = mapPoint ? mapPoint(x, vy) : { x, y: vy };
 
