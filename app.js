@@ -4,7 +4,7 @@ const { createApp, ref, computed, watch, onMounted, onUnmounted, nextTick } = Vu
 const App = {
     setup() {
         const store = useStore();
-        const history = useHistory(store.processSteps, store.variables, store.flowDiagramSettings);
+        const history = useHistory(store.processSteps, store.variables, store.flowDiagramSettings, store.normalizeFlowDiagramSettings);
 
         const variablesMinimized = ref(false);
         const showExportMenu = ref(false);
@@ -16,6 +16,12 @@ const App = {
         const FLOW_DIAGRAM_LEGEND_MODAL_WIDTH = 420;
         const flowDiagramModalPosition = ref({ left: '56px', top: '80px' });
         const flowDiagramLegendModalPosition = ref({ left: '56px', top: '116px' });
+        const modalZIndexCounter = ref(1003);
+        const modalZIndexes = ref({
+            legend: 1001,
+            flowDiagram: 1002,
+            flowDiagramLegend: 1003
+        });
 
         const showPreviewModal = ref(false);
         const previewImageUrl = ref('');
@@ -38,6 +44,9 @@ const App = {
         const flowDiagramBoardWidth = ref(0);
         const FLOW_DIAGRAM_MIN_CARD_WIDTH = 100;
         const FLOW_DIAGRAM_MIN_CARD_HEIGHT = 100;
+        const FLOW_DIAGRAM_LEGEND_MARGIN = 12;
+        const FLOW_DIAGRAM_LEGEND_PADDING = 10;
+        const FLOW_DIAGRAM_LEGEND_MIN_WIDTH = 40;
         let simulationFrameHandle = null;
 
         const editingFlowDiagramStepId = ref(null);
@@ -87,6 +96,7 @@ const App = {
             legendModalPosition.value.left = Math.max(0, (winWidth - 500) / 2) + 'px';
             legendModalPosition.value.top = '100px';
             showLegendSettingsModal.value = true;
+            bringModalToFront('legend');
         };
 
         const openFlowDiagramSettings = () => {
@@ -95,6 +105,7 @@ const App = {
             flowDiagramModalPosition.value.left = left + 'px';
             flowDiagramModalPosition.value.top = '80px';
             showFlowDiagramSettingsModal.value = true;
+            bringModalToFront('flowDiagram');
         };
 
         const openFlowDiagramLegendSettings = () => {
@@ -103,10 +114,20 @@ const App = {
             flowDiagramLegendModalPosition.value.left = left + 'px';
             flowDiagramLegendModalPosition.value.top = '116px';
             showFlowDiagramLegendSettingsModal.value = true;
+            bringModalToFront('flowDiagramLegend');
+        };
+
+        const bringModalToFront = (modalKey) => {
+            modalZIndexCounter.value += 1;
+            modalZIndexes.value = {
+                ...modalZIndexes.value,
+                [modalKey]: modalZIndexCounter.value
+            };
         };
 
         let dragInfo = { isDragging: false, startX: 0, startY: 0, initialLeft: 0, initialTop: 0 };
         const startDragLegendSettings = (e) => {
+            bringModalToFront('legend');
             dragInfo.isDragging = true;
             dragInfo.startX = e.clientX;
             dragInfo.startY = e.clientY;
@@ -131,6 +152,7 @@ const App = {
 
         let flowDragInfo = { isDragging: false, startX: 0, startY: 0, initialLeft: 0, initialTop: 0 };
         const startDragFlowDiagramSettings = (e) => {
+            bringModalToFront('flowDiagram');
             flowDragInfo.isDragging = true;
             flowDragInfo.startX = e.clientX;
             flowDragInfo.startY = e.clientY;
@@ -155,6 +177,7 @@ const App = {
 
         let flowLegendDragInfo = { isDragging: false, startX: 0, startY: 0, initialLeft: 0, initialTop: 0 };
         const startDragFlowDiagramLegendSettings = (e) => {
+            bringModalToFront('flowDiagramLegend');
             flowLegendDragInfo.isDragging = true;
             flowLegendDragInfo.startX = e.clientX;
             flowLegendDragInfo.startY = e.clientY;
@@ -221,6 +244,118 @@ const App = {
             };
         };
 
+        const getFlowDiagramLegendSourceItems = () => {
+            const settings = store.legendSettings.value;
+            const hiddenLegendIds = Array.isArray(settings.hiddenLegendIds) ? settings.hiddenLegendIds : [];
+            return store.processSteps.value
+                .filter((step, index) => (index === 0 || step.type === 'deposit') && !hiddenLegendIds.includes(step.id))
+                .map(step => ({
+                    id: step.id,
+                    color: step.color,
+                    text: settings.textSource === 'material'
+                        ? (step.material || 'Unnamed')
+                        : (step.name || 'Unnamed')
+                }));
+        };
+
+        const getFlowDiagramLegendConfig = () => {
+            const legend = store.flowDiagramSettings.value.legend || {};
+            const normalizedPosition = legend.position === 'empty-cell' ? 'empty-cell-top' : legend.position;
+            const position = ['top-left', 'top-right', 'bottom-left', 'bottom-right', 'empty-cell-top', 'empty-cell-bottom'].includes(normalizedPosition)
+                ? normalizedPosition
+                : 'top-left';
+            const width = Number(legend.width);
+            const itemsPerRow = parseInt(legend.itemsPerRow, 10);
+            const fontSize = Number(legend.fontSize);
+            const swatchSize = Number(legend.swatchSize);
+            return {
+                enabled: Boolean(legend.enabled),
+                position,
+                width: Number.isFinite(width) && width > 0 ? Math.max(FLOW_DIAGRAM_LEGEND_MIN_WIDTH, width) : null,
+                itemsPerRow: Number.isFinite(itemsPerRow) ? Math.min(50, Math.max(1, itemsPerRow)) : 8,
+                fontSize: Number.isFinite(fontSize) ? Math.min(72, Math.max(6, fontSize)) : 12,
+                swatchSize: Number.isFinite(swatchSize) ? Math.min(80, Math.max(4, swatchSize)) : 14,
+                showBorder: legend.showBorder !== false
+            };
+        };
+
+        const buildFlowDiagramLegendLayout = ({ cards, contentWidth, cardsContentHeight, cardWidth, cardBodyBottom, gapX, rowPitch, itemsPerRow: effectiveItemsPerRow }) => {
+            const legendConfig = getFlowDiagramLegendConfig();
+            const sourceItems = getFlowDiagramLegendSourceItems();
+            if (!legendConfig.enabled || !sourceItems.length || contentWidth <= 0) {
+                return { visible: false, cardsOffsetY: 0 };
+            }
+
+            const requestedWidth = legendConfig.width || contentWidth / 2;
+            let x = 0;
+            let y = 0;
+            let maxWidth = contentWidth;
+            let cardsOffsetY = 0;
+
+            const isEmptyCellLegend = legendConfig.position === 'empty-cell-top' || legendConfig.position === 'empty-cell-bottom';
+
+            if (isEmptyCellLegend) {
+                const nextIndex = cards.length;
+                const layoutItemsPerRow = Math.max(1, effectiveItemsPerRow || 1);
+                const col = nextIndex % layoutItemsPerRow;
+                const row = Math.floor(nextIndex / layoutItemsPerRow);
+                x = col * (cardWidth + gapX);
+                y = row * rowPitch;
+                maxWidth = Math.max(FLOW_DIAGRAM_LEGEND_MIN_WIDTH, contentWidth - x);
+            } else if (legendConfig.position === 'bottom-left' || legendConfig.position === 'bottom-right') {
+                y = cardsContentHeight + FLOW_DIAGRAM_LEGEND_MARGIN;
+            }
+
+            const actualWidth = Math.max(FLOW_DIAGRAM_LEGEND_MIN_WIDTH, Math.min(requestedWidth, maxWidth));
+            if (legendConfig.position === 'top-right' || legendConfig.position === 'bottom-right') {
+                x = Math.max(0, contentWidth - actualWidth);
+            }
+
+            const itemsPerRow = Math.max(1, legendConfig.itemsPerRow);
+            const rowCount = Math.max(1, Math.ceil(sourceItems.length / itemsPerRow));
+            const rowHeight = Math.max(legendConfig.swatchSize, legendConfig.fontSize) + 10;
+            const height = FLOW_DIAGRAM_LEGEND_PADDING * 2 + rowCount * rowHeight;
+            const cellWidth = Math.max(1, (actualWidth - FLOW_DIAGRAM_LEGEND_PADDING * 2) / itemsPerRow);
+
+            if (legendConfig.position === 'top-left' || legendConfig.position === 'top-right') {
+                cardsOffsetY = height + FLOW_DIAGRAM_LEGEND_MARGIN;
+            }
+            if (legendConfig.position === 'empty-cell-bottom') {
+                y = Math.max(0, y + cardBodyBottom - height);
+            }
+
+            const items = sourceItems.map((item, index) => {
+                const row = Math.floor(index / itemsPerRow);
+                const col = index % itemsPerRow;
+                const itemX = FLOW_DIAGRAM_LEGEND_PADDING + col * cellWidth;
+                const centerY = FLOW_DIAGRAM_LEGEND_PADDING + row * rowHeight + rowHeight / 2;
+                return {
+                    ...item,
+                    swatchX: itemX,
+                    swatchY: centerY - legendConfig.swatchSize / 2,
+                    textX: itemX + legendConfig.swatchSize + 6,
+                    textY: centerY
+                };
+            });
+
+            return {
+                visible: true,
+                x,
+                y,
+                width: actualWidth,
+                height,
+                items,
+                cardsOffsetY,
+                widthClamped: requestedWidth > maxWidth,
+                fontSize: legendConfig.fontSize,
+                swatchSize: legendConfig.swatchSize,
+                background: store.legendSettings.value.bgColor || '#ffffff',
+                fontColor: store.legendSettings.value.fontColor || '#000000',
+                fontFamily: store.legendSettings.value.fontFamily || 'Arial',
+                showBorder: legendConfig.showBorder
+            };
+        };
+
         const getFlowDiagramLayoutFrame = (cards = flowDiagramCards.value || [], options = {}) => {
             const boardPadding = Number(store.flowDiagramSettings.value.boardPadding) || 0;
             const gapX = Math.max(0, Number(store.flowDiagramSettings.value.gapX) || 0);
@@ -233,7 +368,23 @@ const App = {
             const contentHeight = totalRows > 0
                 ? metrics.height + Math.max(0, totalRows - 1) * rowPitch
                 : 0;
-            const boardHeight = contentHeight + boardPadding * 2;
+            const contentWidth = boardWidth - boardPadding * 2;
+            const legend = buildFlowDiagramLegendLayout({
+                cards,
+                contentWidth,
+                cardsContentHeight: contentHeight,
+                cardWidth: metrics.width,
+                cardBodyBottom: metrics.borderWidth + metrics.headerHeight + metrics.bodyVisibleHeight,
+                gapX,
+                rowPitch,
+                itemsPerRow
+            });
+            const cardsOffsetY = legend.cardsOffsetY || 0;
+            const totalContentHeight = Math.max(
+                cardsOffsetY + contentHeight,
+                legend.visible ? legend.y + legend.height : 0
+            );
+            const boardHeight = totalContentHeight + boardPadding * 2;
             return {
                 boardPadding,
                 gapX,
@@ -250,24 +401,30 @@ const App = {
                 captionHeight: metrics.captionHeight,
                 captionBlockHeight: metrics.captionBlockHeight,
                 rowPitch,
+                contentWidth,
+                contentHeight: totalContentHeight,
+                cardsOffsetY,
+                legend,
                 boardWidth,
                 boardHeight: Math.max(boardPadding * 2, boardHeight)
             };
         };
 
+        const flowDiagramLayoutFrame = computed(() => getFlowDiagramLayoutFrame());
+
         const flowDiagramGridStyle = computed(() => {
-            const frame = getFlowDiagramLayoutFrame();
+            const frame = flowDiagramLayoutFrame.value;
             return {
                 position: 'relative',
-                width: `${frame.boardWidth - frame.boardPadding * 2}px`,
-                height: `${Math.max(0, frame.boardHeight - frame.boardPadding * 2)}px`
+                width: `${frame.contentWidth}px`,
+                height: `${Math.max(0, frame.contentHeight)}px`
             };
         });
 
         const getFlowDiagramCardStyle = (card) => {
-            const frame = getFlowDiagramLayoutFrame();
+            const frame = flowDiagramLayoutFrame.value;
             const x = (card.colIndex || 0) * (frame.cardWidth + frame.gapX);
-            const y = (card.rowIndex || 0) * frame.rowPitch;
+            const y = frame.cardsOffsetY + (card.rowIndex || 0) * frame.rowPitch;
             return {
                 position: 'absolute',
                 left: `${x}px`,
@@ -277,7 +434,7 @@ const App = {
         };
 
         const getFlowDiagramCardRenderMeta = () => {
-            const frame = getFlowDiagramLayoutFrame();
+            const frame = flowDiagramLayoutFrame.value;
             return {
                 cardHeight: frame.cardHeight,
                 borderWidth: frame.cardBorderWidth,
@@ -289,6 +446,50 @@ const App = {
                 captionBlockHeight: frame.captionBlockHeight
             };
         };
+
+        const flowDiagramLegendLayout = computed(() => flowDiagramLayoutFrame.value.legend);
+
+        const flowDiagramLegendStyle = computed(() => {
+            const legend = flowDiagramLegendLayout.value;
+            if (!legend || !legend.visible) return {};
+            return {
+                position: 'absolute',
+                left: `${legend.x}px`,
+                top: `${legend.y}px`,
+                width: `${legend.width}px`,
+                height: `${legend.height}px`,
+                pointerEvents: 'none',
+                overflow: 'visible'
+            };
+        });
+
+        const flowDiagramLegendWidthWarning = computed(() => {
+            const legend = flowDiagramLegendLayout.value;
+            return Boolean(legend && legend.visible && legend.widthClamped);
+        });
+
+        const flowDiagramLegendDefaultWidth = computed(() => {
+            const frame = flowDiagramLayoutFrame.value;
+            return Math.round(Math.max(FLOW_DIAGRAM_LEGEND_MIN_WIDTH, frame.contentWidth / 2));
+        });
+
+        const flowDiagramLegendWidthInput = computed({
+            get() {
+                const width = Number(store.flowDiagramSettings.value.legend && store.flowDiagramSettings.value.legend.width);
+                return Number.isFinite(width) && width > 0 ? width : flowDiagramLegendDefaultWidth.value;
+            },
+            set(value) {
+                const parsed = Number(value);
+                store.flowDiagramSettings.value.legend.width = Number.isFinite(parsed) && parsed > 0
+                    ? Math.max(FLOW_DIAGRAM_LEGEND_MIN_WIDTH, parsed)
+                    : null;
+            }
+        });
+
+        const flowDiagramLegendDefaultWidthHint = computed(() => {
+            const legend = store.flowDiagramSettings.value.legend || {};
+            return legend.width == null ? `当前为默认宽度 ${flowDiagramLegendDefaultWidth.value}` : '';
+        });
 
         const flowDiagramBoardStyle = computed(() => ({
             background: store.flowDiagramSettings.value.boardBackground,
@@ -405,6 +606,11 @@ const App = {
             if (!step) return '';
             return step.flowDiagramCaption || step.name || '';
         };
+
+        const escapeSvgText = (value) => String(value || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
 
         const legendData = computed(() => {
             const result = store.engineResult.value;
@@ -790,6 +996,21 @@ const App = {
             const boardWidth = frame.boardWidth;
             const boardHeight = frame.boardHeight;
             const captionAnchor = getFlowDiagramCaptionAnchor();
+            const appendFlowDiagramLegend = () => {
+                const legend = frame.legend;
+                if (!legend || !legend.visible) return;
+                const legendX = boardPadding + legend.x;
+                const legendY = boardPadding + legend.y;
+                svgParts.push(`<g transform="translate(${legendX}, ${legendY})">`);
+                svgParts.push(`<rect x="0" y="0" width="${legend.width}" height="${legend.height}" fill="${legend.background}" stroke="${legend.showBorder ? '#d1d5db' : 'none'}" stroke-width="${legend.showBorder ? 1 : 0}"/>`);
+                legend.items.forEach(item => {
+                    svgParts.push(`<rect x="${item.swatchX}" y="${item.swatchY}" width="${legend.swatchSize}" height="${legend.swatchSize}" fill="${item.color}" stroke="#333" stroke-width="1"/>`);
+                    svgParts.push(
+                        `<text x="${item.textX}" y="${item.textY}" dominant-baseline="middle" font-family="${legend.fontFamily}" font-size="${legend.fontSize}" fill="${legend.fontColor}">${escapeSvgText(item.text)}</text>`
+                    );
+                });
+                svgParts.push(`</g>`);
+            };
 
             let svgParts = [
                 `<svg xmlns="http://www.w3.org/2000/svg" width="${boardWidth}" height="${boardHeight}" viewBox="0 0 ${boardWidth} ${boardHeight}">`,
@@ -798,12 +1019,12 @@ const App = {
 
             cards.forEach(card => {
                 const x = boardPadding + (card.colIndex || 0) * (cardWidth + gapX);
-                const y = boardPadding + (card.rowIndex || 0) * frame.rowPitch;
+                const y = boardPadding + frame.cardsOffsetY + (card.rowIndex || 0) * frame.rowPitch;
                 const captionTextAnchor = captionAnchor || 'middle';
                 const captionTextX = captionTextAnchor === 'start'
                     ? 18
                     : (captionTextAnchor === 'end' ? Math.max(18, cardWidth - 18) : cardWidth / 2);
-                const escapedCaption = (card.caption || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                const escapedCaption = escapeSvgText(card.caption);
 
                 svgParts.push(`<g transform="translate(${x}, ${y})">`);
                 if (cardChrome === 'full') {
@@ -847,6 +1068,7 @@ const App = {
                 svgParts.push(`</g>`);
             });
 
+            appendFlowDiagramLegend();
             svgParts.push(`</svg>`);
 
             return {
@@ -1051,7 +1273,7 @@ const App = {
                 variables: store.variables.value,
                 processSteps: store.processSteps.value,
                 legendSettings: store.legendSettings.value,
-                flowDiagramSettings: store.flowDiagramSettings.value
+                flowDiagramSettings: store.normalizeFlowDiagramSettings(store.flowDiagramSettings.value)
             };
 
             let useLocal = false;
@@ -1093,6 +1315,11 @@ const App = {
             flowDiagramGridStyle,
             getFlowDiagramCardStyle,
             getFlowDiagramCardRenderMeta,
+            flowDiagramLegendLayout,
+            flowDiagramLegendStyle,
+            flowDiagramLegendWidthWarning,
+            flowDiagramLegendWidthInput,
+            flowDiagramLegendDefaultWidthHint,
             flowDiagramBoardStyle,
             flowDiagramSummaryText,
             flowDiagramBoardRef,
@@ -1129,9 +1356,11 @@ const App = {
             legendModalPosition,
             flowDiagramModalPosition,
             flowDiagramLegendModalPosition,
+            modalZIndexes,
             openLegendSettings,
             openFlowDiagramSettings,
             openFlowDiagramLegendSettings,
+            bringModalToFront,
             startDragLegendSettings,
             startDragFlowDiagramSettings,
             startDragFlowDiagramLegendSettings,

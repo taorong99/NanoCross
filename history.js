@@ -1,6 +1,6 @@
 // history.js - 负责处理撤销、重做与历史记录栈的管理
 
-function useHistory(processSteps, variables, flowDiagramSettings) {
+function useHistory(processSteps, variables, flowDiagramSettings, normalizeFlowDiagramSettings) {
     const { ref } = Vue;
     const cloneState = (value) => {
         if (typeof structuredClone === 'function') {
@@ -8,6 +8,11 @@ function useHistory(processSteps, variables, flowDiagramSettings) {
         }
         return JSON.parse(JSON.stringify(value));
     };
+    const normalizeFlowSettings = (settings) => (
+        typeof normalizeFlowDiagramSettings === 'function'
+            ? normalizeFlowDiagramSettings(settings)
+            : cloneState(settings)
+    );
     
     // =========================================
     // 1. 历史栈及内部状态
@@ -48,7 +53,7 @@ function useHistory(processSteps, variables, flowDiagramSettings) {
             const state = historyStack.value[historyIndex.value];
             processSteps.value = cloneState(state.steps);
             variables.value = cloneState(state.vars);
-            flowDiagramSettings.value = cloneState(state.flowDiagramSettings);
+            flowDiagramSettings.value = normalizeFlowSettings(state.flowDiagramSettings);
             setTimeout(() => { isUndoing = false; }, 50);
         }
     };
@@ -61,7 +66,7 @@ function useHistory(processSteps, variables, flowDiagramSettings) {
             const state = historyStack.value[historyIndex.value];
             processSteps.value = cloneState(state.steps);
             variables.value = cloneState(state.vars);
-            flowDiagramSettings.value = cloneState(state.flowDiagramSettings);
+            flowDiagramSettings.value = normalizeFlowSettings(state.flowDiagramSettings);
             setTimeout(() => { isUndoing = false; }, 50);
         }
     };

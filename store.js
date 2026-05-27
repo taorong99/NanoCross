@@ -3,6 +3,16 @@
 function useStore() {
     const { ref, computed } = Vue;
 
+    const createDefaultFlowDiagramLegendSettings = () => ({
+        enabled: false,
+        position: 'top-left',
+        width: null,
+        itemsPerRow: 8,
+        fontSize: 12,
+        swatchSize: 14,
+        showBorder: true
+    });
+
     const createDefaultFlowDiagramSettings = () => ({
         itemsPerRow: 4,
         showCaption: true,
@@ -18,8 +28,46 @@ function useStore() {
         boardBackground: '#ffffff',
         quality: 'draft',
         autoRefresh: false,
-        hiddenStepIds: []
+        hiddenStepIds: [],
+        legend: createDefaultFlowDiagramLegendSettings()
     });
+
+    const normalizeFlowDiagramLegendSettings = (settings) => {
+        const defaults = createDefaultFlowDiagramLegendSettings();
+        const merged = { ...defaults, ...(settings || {}) };
+        const allowedPositions = ['top-left', 'top-right', 'bottom-left', 'bottom-right', 'empty-cell-top', 'empty-cell-bottom'];
+
+        merged.enabled = Boolean(merged.enabled);
+        if (merged.position === 'empty-cell') {
+            merged.position = 'empty-cell-top';
+        }
+        if (!allowedPositions.includes(merged.position)) {
+            merged.position = defaults.position;
+        }
+        merged.showBorder = merged.showBorder !== false;
+
+        const parsedWidth = Number(merged.width);
+        merged.width = Number.isFinite(parsedWidth) && parsedWidth > 0
+            ? Math.max(40, parsedWidth)
+            : null;
+
+        const parsedItemsPerRow = parseInt(merged.itemsPerRow, 10);
+        merged.itemsPerRow = Number.isFinite(parsedItemsPerRow)
+            ? Math.min(50, Math.max(1, parsedItemsPerRow))
+            : defaults.itemsPerRow;
+
+        const parsedFontSize = Number(merged.fontSize);
+        merged.fontSize = Number.isFinite(parsedFontSize)
+            ? Math.min(72, Math.max(6, parsedFontSize))
+            : defaults.fontSize;
+
+        const parsedSwatchSize = Number(merged.swatchSize);
+        merged.swatchSize = Number.isFinite(parsedSwatchSize)
+            ? Math.min(80, Math.max(4, parsedSwatchSize))
+            : defaults.swatchSize;
+
+        return merged;
+    };
 
     const normalizeFlowDiagramSettings = (settings) => {
         const defaults = createDefaultFlowDiagramSettings();
@@ -41,6 +89,7 @@ function useStore() {
         if (!['draft', 'balanced', 'high'].includes(merged.quality)) {
             merged.quality = defaults.quality;
         }
+        merged.legend = normalizeFlowDiagramLegendSettings(merged.legend);
         return merged;
     };
 

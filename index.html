@@ -295,6 +295,20 @@
                              @commit-caption="commitFlowDiagramCaption"
                          />
                      </div>
+                     <svg
+                         v-if="flowDiagramLegendLayout && flowDiagramLegendLayout.visible"
+                         xmlns="http://www.w3.org/2000/svg"
+                         :width="flowDiagramLegendLayout.width"
+                         :height="flowDiagramLegendLayout.height"
+                         :viewBox="'0 0 ' + flowDiagramLegendLayout.width + ' ' + flowDiagramLegendLayout.height"
+                         :style="flowDiagramLegendStyle"
+                     >
+                         <rect x="0" y="0" :width="flowDiagramLegendLayout.width" :height="flowDiagramLegendLayout.height" :fill="flowDiagramLegendLayout.background" :stroke="flowDiagramLegendLayout.showBorder ? '#d1d5db' : 'none'" :stroke-width="flowDiagramLegendLayout.showBorder ? 1 : 0"></rect>
+                         <g v-for="item in flowDiagramLegendLayout.items" :key="'flow-legend-' + item.id">
+                             <rect :x="item.swatchX" :y="item.swatchY" :width="flowDiagramLegendLayout.swatchSize" :height="flowDiagramLegendLayout.swatchSize" :fill="item.color" stroke="#333" stroke-width="1"></rect>
+                             <text :x="item.textX" :y="item.textY" dominant-baseline="middle" :font-family="flowDiagramLegendLayout.fontFamily" :font-size="flowDiagramLegendLayout.fontSize" :fill="flowDiagramLegendLayout.fontColor">{{ item.text }}</text>
+                         </g>
+                     </svg>
                  </flow-diagram-board>
              </div>
              
@@ -306,7 +320,7 @@
              </div>
 
              <!-- 图例设置模态框 -->
-             <div v-if="showLegendSettingsModal" style="position: fixed; z-index: 1000;" :style="{ left: legendModalPosition.left, top: legendModalPosition.top }" @mousedown.stop>
+             <div v-if="showLegendSettingsModal" style="position: fixed;" :style="{ left: legendModalPosition.left, top: legendModalPosition.top, zIndex: modalZIndexes.legend }" @mousedown.stop="bringModalToFront('legend')">
                  <div class="modal-content" style="max-width: 500px; padding: 20px; margin: 0; box-shadow: 0 5px 20px rgba(0,0,0,0.5); border: 1px solid #444;">
                      <div class="modal-header" style="cursor: move; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;" @mousedown="startDragLegendSettings">
                          <h3 style="margin: 0; user-select: none;">主视图图例设置</h3>
@@ -404,7 +418,7 @@
              </div>
 
              <!-- 流程图设置模态框 -->
-             <div v-if="showFlowDiagramSettingsModal" style="position: fixed; z-index: 1000;" :style="{ left: flowDiagramModalPosition.left, top: flowDiagramModalPosition.top }" @mousedown.stop>
+             <div v-if="showFlowDiagramSettingsModal" style="position: fixed;" :style="{ left: flowDiagramModalPosition.left, top: flowDiagramModalPosition.top, zIndex: modalZIndexes.flowDiagram }" @mousedown.stop="bringModalToFront('flowDiagram')">
                  <div class="modal-content" style="max-width: 500px; padding: 20px; margin: 0; box-shadow: 0 5px 20px rgba(0,0,0,0.5); border: 1px solid #444;">
                      <div class="modal-header" style="cursor: move; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;" @mousedown="startDragFlowDiagramSettings">
                          <h3 style="margin: 0; user-select: none;">流程图设置</h3>
@@ -519,17 +533,68 @@
              </div>
 
              <!-- 流程图图例设置模态框 -->
-             <div v-if="showFlowDiagramLegendSettingsModal" style="position: fixed; z-index: 1000;" :style="{ left: flowDiagramLegendModalPosition.left, top: flowDiagramLegendModalPosition.top }" @mousedown.stop>
+             <div v-if="showFlowDiagramLegendSettingsModal" style="position: fixed;" :style="{ left: flowDiagramLegendModalPosition.left, top: flowDiagramLegendModalPosition.top, zIndex: modalZIndexes.flowDiagramLegend }" @mousedown.stop="bringModalToFront('flowDiagramLegend')">
                  <div class="modal-content" style="max-width: 420px; padding: 20px; margin: 0; box-shadow: 0 5px 20px rgba(0,0,0,0.5); border: 1px solid #444;">
                      <div class="modal-header" style="cursor: move; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center;" @mousedown="startDragFlowDiagramLegendSettings">
                          <h3 style="margin: 0; user-select: none;">流程图图例设置</h3>
                          <button class="btn btn-small" @click="showFlowDiagramLegendSettingsModal = false" style="margin: 0;">✕</button>
                      </div>
 
-                     <div style="background: #1f2937; border: 1px solid #374151; border-radius: 6px; padding: 12px; color: #d1d5db; line-height: 1.6; font-size: 13px;">
-                         <div style="color: #93c5fd; font-weight: bold; margin-bottom: 6px;">Phase A 已建立独立入口</div>
-                         <div>这里后续只放流程图图例的排版设置：是否启用、位置、宽度、每行个数、文字大小、方块大小。</div>
-                         <div style="margin-top: 8px;">图例内容、字体、颜色、文字来源会读取主视图图例设置，不在这里重复维护。</div>
+                     <div class="form-group" style="margin-bottom: 14px;">
+                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                             <input type="checkbox" v-model="flowDiagramSettings.legend.enabled">
+                             <span style="font-weight: bold; color: #4A90E2;">启用流程图图例</span>
+                         </label>
+                     </div>
+
+                     <div v-if="flowDiagramSettings.legend.enabled">
+                         <div class="form-group" style="display: flex; gap: 15px; margin-bottom: 12px; align-items: flex-end;">
+                             <div style="width: 72px;">
+                                 <label>边框</label>
+                                 <label style="display: flex; align-items: center; gap: 6px; height: 38px; cursor: pointer;">
+                                     <input type="checkbox" v-model="flowDiagramSettings.legend.showBorder">
+                                     <span>显示</span>
+                                 </label>
+                             </div>
+                             <div style="flex: 1;">
+                                 <label>位置</label>
+                                 <select v-model="flowDiagramSettings.legend.position" class="form-control">
+                                     <option value="top-left">左上</option>
+                                     <option value="top-right">右上</option>
+                                     <option value="bottom-left">左下</option>
+                                     <option value="bottom-right">右下</option>
+                                     <option value="empty-cell-top">空白子图处-靠上</option>
+                                     <option value="empty-cell-bottom">空白子图处-靠下</option>
+                                 </select>
+                             </div>
+                             <div style="flex: 1;">
+                                 <label>宽度 <span v-if="flowDiagramLegendDefaultWidthHint" style="color: #9ca3af; font-size: 11px; font-weight: normal;">{{ flowDiagramLegendDefaultWidthHint }}</span></label>
+                                 <input type="number" min="40" v-model.number="flowDiagramLegendWidthInput" class="form-control">
+                             </div>
+                         </div>
+
+                         <div v-if="flowDiagramLegendWidthWarning" style="margin: -4px 0 12px; color: #fbbf24; font-size: 12px; line-height: 1.5;">
+                             当前宽度已超过流程图边界，已按可用宽度显示。
+                         </div>
+
+                         <div class="form-group" style="display: flex; gap: 15px; margin-bottom: 12px;">
+                             <div style="flex: 1;">
+                                 <label>每行个数</label>
+                                 <input type="number" min="1" max="50" v-model.number="flowDiagramSettings.legend.itemsPerRow" class="form-control">
+                             </div>
+                             <div style="flex: 1;">
+                                 <label>文字大小</label>
+                                 <input type="number" min="6" max="72" v-model.number="flowDiagramSettings.legend.fontSize" class="form-control">
+                             </div>
+                             <div style="flex: 1;">
+                                 <label>方块大小</label>
+                                 <input type="number" min="4" max="80" v-model.number="flowDiagramSettings.legend.swatchSize" class="form-control">
+                             </div>
+                         </div>
+
+                         <div style="background: #1f2937; border: 1px solid #374151; border-radius: 6px; padding: 10px 12px; color: #d1d5db; line-height: 1.6; font-size: 12px;">
+                             图例显示的图层、文字来源、背景颜色、字体和字体颜色，使用主视图图例设置的参数。
+                         </div>
                      </div>
 
                      <div class="modal-actions" style="margin-top: 16px;">
