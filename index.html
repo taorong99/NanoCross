@@ -421,6 +421,21 @@
                          </div>
                      </div>
 
+                     <div class="form-group" style="display: flex; gap: 15px; margin-bottom: 12px;">
+                         <div style="flex: 1;">
+                             <label>子图外观</label>
+                             <select v-model="flowDiagramSettings.cardChrome" class="form-control">
+                                 <option value="full" title="显示完整卡片边框、步骤标签和编辑按钮，适合批量调整流程图。">完整编辑</option>
+                                 <option value="minimal" title="默认弱化编辑控件，鼠标移到子图上时显示隐藏和修改按钮。">悬浮编辑</option>
+                                 <option value="none" title="隐藏卡片边框和常驻按钮，接近论文或海报导出效果。">纯净排版</option>
+                             </select>
+                         </div>
+                         <div style="flex: 1;">
+                             <label title="控制截面图底部和说明文字之间的距离，不是文字行距。">图文间距</label>
+                             <input type="number" min="-20" max="80" v-model.number="flowDiagramSettings.captionGap" class="form-control">
+                         </div>
+                     </div>
+
                      <div class="form-group" style="margin-bottom: 12px;">
                          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                              <input type="checkbox" v-model="flowDiagramSettings.showCaption">

@@ -172,9 +172,58 @@ function registerComponents(app) {
             'caption-keydown',
             'commit-caption'
         ],
+        computed: {
+            cardChrome() {
+                return ['full', 'minimal', 'none'].includes(this.flowDiagramSettings.cardChrome)
+                    ? this.flowDiagramSettings.cardChrome
+                    : 'full';
+            },
+            isFullChrome() {
+                return this.cardChrome === 'full';
+            },
+            isMinimalChrome() {
+                return this.cardChrome === 'minimal';
+            },
+            showCardBorder() {
+                return this.cardChrome === 'full' || this.cardChrome === 'minimal';
+            },
+            cardContainerStyle() {
+                const border = this.cardChrome === 'full'
+                    ? '1px solid #d1d5db'
+                    : (this.cardChrome === 'minimal' ? '1px solid rgba(148, 163, 184, 0.45)' : '1px solid transparent');
+                const boxShadow = this.cardChrome === 'full'
+                    ? '0 6px 20px rgba(0,0,0,0.05)'
+                    : 'none';
+                return {
+                    position: 'relative',
+                    border,
+                    borderRadius: '0',
+                    background: '#fff',
+                    overflow: 'hidden',
+                    boxShadow
+                };
+            },
+            captionGap() {
+                const gap = Number(this.flowDiagramSettings.captionGap);
+                if (!Number.isFinite(gap)) return 12;
+                return Math.min(80, Math.max(-20, gap));
+            },
+            captionAreaHeight() {
+                return Math.max(22, 36 + this.captionGap);
+            },
+            captionTextY() {
+                return Math.max(8, this.captionGap + 18);
+            },
+            captionEditTop() {
+                return Math.max(2, this.captionGap + 2);
+            },
+            captionBorderStyle() {
+                return this.isFullChrome ? '1px solid #ececec' : 'none';
+            }
+        },
         template: `
-            <div style="position: relative; border: 1px solid #d1d5db; border-radius: 0; background: #fff; overflow: hidden; box-shadow: 0 6px 20px rgba(0,0,0,0.05);">
-                <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid #ececec; background: #fafafa;">
+            <div :style="cardContainerStyle" class="flow-diagram-card">
+                <div v-if="isFullChrome" style="display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid #ececec; background: #fafafa;">
                     <div style="font-size: 12px; color: #666;">
                         Step {{ card.index }}
                     </div>
@@ -182,6 +231,14 @@ function registerComponents(app) {
                         隐藏
                     </button>
                 </div>
+                <button
+                    v-else
+                    class="btn btn-small flow-card-hover-action"
+                    :style="{ margin: 0, position: 'absolute', top: '8px', right: '8px', zIndex: 3, background: 'rgba(255,255,255,0.92)', color: '#333', border: '1px solid #cfd6de', opacity: 0 }"
+                    @click="$emit('toggle-hidden', card.stepId)"
+                >
+                    隐藏
+                </button>
 
                 <div style="padding: 0;">
                     <svg xmlns="http://www.w3.org/2000/svg" :viewBox="card.viewBox" preserveAspectRatio="none" width="100%" style="display: block; aspect-ratio: 1 / 0.72; background: #ffffff; border-radius: 0;">
@@ -191,15 +248,15 @@ function registerComponents(app) {
                     </svg>
                 </div>
 
-                <div v-if="flowDiagramSettings.showCaption" style="position: relative; border-top: 1px solid #ececec; background: #fff;">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="100%" height="64" viewBox="0 0 300 64" style="display: block;">
-                        <text :x="captionX" y="36" :text-anchor="captionAnchor" :fill="flowDiagramSettings.fontColor" :font-family="flowDiagramSettings.fontFamily" :font-size="flowDiagramSettings.fontSize">
+                <div v-if="flowDiagramSettings.showCaption" :style="{ position: 'relative', borderTop: captionBorderStyle, background: '#fff' }">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="100%" :height="captionAreaHeight" :viewBox="'0 0 300 ' + captionAreaHeight" style="display: block;">
+                        <text :x="captionX" :y="captionTextY" :text-anchor="captionAnchor" :fill="flowDiagramSettings.fontColor" :font-family="flowDiagramSettings.fontFamily" :font-size="flowDiagramSettings.fontSize">
                             {{ captionPreview }}
                         </text>
                     </svg>
                     <div v-if="editingFlowDiagramStepId !== card.stepId" style="position: absolute; inset: 0; display: flex; align-items: stretch;">
                         <button style="position: absolute; inset: 0; border: none; background: transparent; cursor: pointer;" @dblclick.stop="$emit('start-edit', card.stepId)" @click.stop title="双击编辑流程图文字"></button>
-                        <button class="btn btn-small" style="position: absolute; right: 10px; top: 10px; margin: 0; background: rgba(255,255,255,0.9); color: #333; border: 1px solid #d5dbe3;" @click.stop="$emit('start-edit', card.stepId)">修改</button>
+                        <button class="btn btn-small flow-card-hover-action" :style="{ position: 'absolute', right: '10px', top: captionEditTop + 'px', margin: 0, background: 'rgba(255,255,255,0.9)', color: '#333', border: '1px solid #d5dbe3', opacity: isFullChrome ? 1 : 0 }" @click.stop="$emit('start-edit', card.stepId)">修改</button>
                     </div>
                     <div v-else style="position: absolute; inset: 0; padding: 10px;">
                         <input

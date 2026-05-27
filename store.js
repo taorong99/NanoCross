@@ -10,6 +10,8 @@ function useStore() {
         fontSize: 14,
         fontColor: '#000000',
         textAlign: 'center',
+        cardChrome: 'full',
+        captionGap: 12,
         gapX: 24,
         gapY: 24,
         boardPadding: 20,
@@ -24,6 +26,13 @@ function useStore() {
         const merged = { ...defaults, ...(settings || {}) };
         const parsedItemsPerRow = parseInt(merged.itemsPerRow, 10);
         merged.itemsPerRow = Number.isFinite(parsedItemsPerRow) && parsedItemsPerRow > 0 ? parsedItemsPerRow : defaults.itemsPerRow;
+        if (!['full', 'minimal', 'none'].includes(merged.cardChrome)) {
+            merged.cardChrome = defaults.cardChrome;
+        }
+        const parsedCaptionGap = Number(merged.captionGap);
+        merged.captionGap = Number.isFinite(parsedCaptionGap)
+            ? Math.min(80, Math.max(-20, parsedCaptionGap))
+            : defaults.captionGap;
         merged.hiddenStepIds = Array.isArray(merged.hiddenStepIds) ? [...merged.hiddenStepIds] : [];
         if (!['draft', 'balanced', 'high'].includes(merged.quality)) {
             merged.quality = defaults.quality;

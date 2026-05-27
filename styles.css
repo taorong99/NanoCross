@@ -251,3 +251,12 @@ body {
 .btn-secondary:hover {
     background: #666;
 }
+
+.flow-diagram-card .flow-card-hover-action {
+    transition: opacity 0.15s ease;
+}
+
+.flow-diagram-card:hover .flow-card-hover-action,
+.flow-diagram-card:focus-within .flow-card-hover-action {
+    opacity: 1 !important;
+}

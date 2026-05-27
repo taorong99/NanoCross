@@ -665,8 +665,14 @@ const App = {
             const boardPadding = Number(store.flowDiagramSettings.value.boardPadding) || 0;
             const gapX = Number(store.flowDiagramSettings.value.gapX) || 0;
             const gapY = Number(store.flowDiagramSettings.value.gapY) || 0;
-            const captionHeight = store.flowDiagramSettings.value.showCaption ? 64 : 0;
-            const cardHeaderHeight = 41;
+            const cardChrome = ['full', 'minimal', 'none'].includes(store.flowDiagramSettings.value.cardChrome)
+                ? store.flowDiagramSettings.value.cardChrome
+                : 'full';
+            const captionGapRaw = Number(store.flowDiagramSettings.value.captionGap);
+            const captionGap = Number.isFinite(captionGapRaw) ? Math.min(80, Math.max(-20, captionGapRaw)) : 12;
+            const captionHeight = store.flowDiagramSettings.value.showCaption ? Math.max(22, 36 + captionGap) : 0;
+            const captionTextOffset = Math.max(8, captionGap + 18);
+            const cardHeaderHeight = 0;
             const cardBodyHeight = flowDiagramLayout.value.height;
             const cardHeight = cardHeaderHeight + cardBodyHeight + captionHeight;
             const itemsPerRow = Math.max(1, flowDiagramLayout.value.effectiveItemsPerRow || 1);
@@ -690,12 +696,15 @@ const App = {
                     ? 18
                     : (captionTextAnchor === 'end' ? Math.max(18, cardWidth - 18) : cardWidth / 2);
                 const escapedCaption = (card.caption || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                const escapedStepName = (`Step ${card.index}`).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
                 svgParts.push(`<g transform="translate(${x}, ${y})">`);
-                svgParts.push(`<rect x="0" y="0" width="${cardWidth}" height="${cardHeight}" fill="#ffffff" stroke="#d1d5db" stroke-width="1"/>`);
-                svgParts.push(`<rect x="0" y="0" width="${cardWidth}" height="${cardHeaderHeight}" fill="#fafafa" stroke="#ececec" stroke-width="1"/>`);
-                svgParts.push(`<text x="12" y="25" font-size="12" font-family="Arial" fill="#666666">${escapedStepName}</text>`);
+                if (cardChrome === 'full') {
+                    svgParts.push(`<rect x="0" y="0" width="${cardWidth}" height="${cardHeight}" fill="#ffffff" stroke="#d1d5db" stroke-width="1"/>`);
+                } else if (cardChrome === 'minimal') {
+                    svgParts.push(`<rect x="0" y="0" width="${cardWidth}" height="${cardHeight}" fill="#ffffff" stroke="#d5dce5" stroke-width="1"/>`);
+                } else {
+                    svgParts.push(`<rect x="0" y="0" width="${cardWidth}" height="${cardHeight}" fill="#ffffff"/>`);
+                }
                 svgParts.push(`<rect x="0" y="${cardHeaderHeight}" width="${cardWidth}" height="${cardBodyHeight}" fill="#ffffff"/>`);
                 svgParts.push(
                     `<svg x="0" y="${cardHeaderHeight}" width="${cardWidth}" height="${cardBodyHeight}" viewBox="${card.viewBox}" preserveAspectRatio="none">`
@@ -706,9 +715,11 @@ const App = {
                 svgParts.push(`</svg>`);
 
                 if (store.flowDiagramSettings.value.showCaption) {
-                    svgParts.push(`<line x1="0" y1="${cardHeaderHeight + cardBodyHeight}" x2="${cardWidth}" y2="${cardHeaderHeight + cardBodyHeight}" stroke="#ececec" stroke-width="1"/>`);
+                    if (cardChrome === 'full') {
+                        svgParts.push(`<line x1="0" y1="${cardHeaderHeight + cardBodyHeight}" x2="${cardWidth}" y2="${cardHeaderHeight + cardBodyHeight}" stroke="#ececec" stroke-width="1"/>`);
+                    }
                     svgParts.push(
-                        `<text x="${captionTextX}" y="${cardHeaderHeight + cardBodyHeight + 36}" text-anchor="${captionTextAnchor}" font-family="${store.flowDiagramSettings.value.fontFamily}" font-size="${store.flowDiagramSettings.value.fontSize}" fill="${store.flowDiagramSettings.value.fontColor}">${escapedCaption}</text>`
+                        `<text x="${captionTextX}" y="${cardHeaderHeight + cardBodyHeight + captionTextOffset}" text-anchor="${captionTextAnchor}" font-family="${store.flowDiagramSettings.value.fontFamily}" font-size="${store.flowDiagramSettings.value.fontSize}" fill="${store.flowDiagramSettings.value.fontColor}">${escapedCaption}</text>`
                     );
                 }
 
