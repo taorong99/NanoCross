@@ -10,9 +10,12 @@ const App = {
         const showExportMenu = ref(false);
         const showLegendSettingsModal = ref(false);
         const showFlowDiagramSettingsModal = ref(false);
+        const showFlowDiagramLegendSettingsModal = ref(false);
         const legendModalPosition = ref({ left: '50px', top: '100px' });
         const FLOW_DIAGRAM_MODAL_WIDTH = 500;
+        const FLOW_DIAGRAM_LEGEND_MODAL_WIDTH = 420;
         const flowDiagramModalPosition = ref({ left: '56px', top: '80px' });
+        const flowDiagramLegendModalPosition = ref({ left: '56px', top: '116px' });
 
         const showPreviewModal = ref(false);
         const previewImageUrl = ref('');
@@ -94,6 +97,14 @@ const App = {
             showFlowDiagramSettingsModal.value = true;
         };
 
+        const openFlowDiagramLegendSettings = () => {
+            const propertiesPanelRight = layersWidth.value + 6 + propsWidth.value;
+            const left = Math.max(20, propertiesPanelRight - FLOW_DIAGRAM_LEGEND_MODAL_WIDTH);
+            flowDiagramLegendModalPosition.value.left = left + 'px';
+            flowDiagramLegendModalPosition.value.top = '116px';
+            showFlowDiagramLegendSettingsModal.value = true;
+        };
+
         let dragInfo = { isDragging: false, startX: 0, startY: 0, initialLeft: 0, initialTop: 0 };
         const startDragLegendSettings = (e) => {
             dragInfo.isDragging = true;
@@ -140,6 +151,30 @@ const App = {
             flowDragInfo.isDragging = false;
             document.removeEventListener('mousemove', onDragFlowDiagramSettings);
             document.removeEventListener('mouseup', endDragFlowDiagramSettings);
+        };
+
+        let flowLegendDragInfo = { isDragging: false, startX: 0, startY: 0, initialLeft: 0, initialTop: 0 };
+        const startDragFlowDiagramLegendSettings = (e) => {
+            flowLegendDragInfo.isDragging = true;
+            flowLegendDragInfo.startX = e.clientX;
+            flowLegendDragInfo.startY = e.clientY;
+            flowLegendDragInfo.initialLeft = parseInt(flowDiagramLegendModalPosition.value.left, 10) || 0;
+            flowLegendDragInfo.initialTop = parseInt(flowDiagramLegendModalPosition.value.top, 10) || 0;
+
+            document.addEventListener('mousemove', onDragFlowDiagramLegendSettings);
+            document.addEventListener('mouseup', endDragFlowDiagramLegendSettings);
+        };
+        const onDragFlowDiagramLegendSettings = (e) => {
+            if (!flowLegendDragInfo.isDragging) return;
+            const dx = e.clientX - flowLegendDragInfo.startX;
+            const dy = e.clientY - flowLegendDragInfo.startY;
+            flowDiagramLegendModalPosition.value.left = (flowLegendDragInfo.initialLeft + dx) + 'px';
+            flowDiagramLegendModalPosition.value.top = (flowLegendDragInfo.initialTop + dy) + 'px';
+        };
+        const endDragFlowDiagramLegendSettings = () => {
+            flowLegendDragInfo.isDragging = false;
+            document.removeEventListener('mousemove', onDragFlowDiagramLegendSettings);
+            document.removeEventListener('mouseup', endDragFlowDiagramLegendSettings);
         };
 
         const flowDiagramCards = computed(() => flowDiagramPipeline.items.value);
@@ -947,6 +982,7 @@ const App = {
             showExportMenu,
             showLegendSettingsModal,
             showFlowDiagramSettingsModal,
+            showFlowDiagramLegendSettingsModal,
             showPreviewModal,
             showFlowDiagramExportQualityModal,
             previewImageUrl,
@@ -958,10 +994,13 @@ const App = {
             mainSvgRef,
             legendModalPosition,
             flowDiagramModalPosition,
+            flowDiagramLegendModalPosition,
             openLegendSettings,
             openFlowDiagramSettings,
+            openFlowDiagramLegendSettings,
             startDragLegendSettings,
             startDragFlowDiagramSettings,
+            startDragFlowDiagramLegendSettings,
             undo: history.undo,
             redo: history.redo,
             canUndo: history.canUndo,

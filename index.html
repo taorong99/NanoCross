@@ -154,11 +154,14 @@
                    </div>
                </div>
 
-             <div style="position: absolute; left: 20px; bottom: 20px; z-index: 100; display: flex; flex-direction: column; gap: 8px;">
-                 <button v-if="viewMode === 'flowDiagram'" class="btn btn-small floating-btn" @click.stop="openFlowDiagramSettings">流程图设置</button>
-                 <div style="display: flex; gap: 6px;">
-                     <button class="btn btn-small floating-btn" :style="viewMode === 'main' ? { background: '#4A90E2', color: '#fff', border: '1px solid #4A90E2' } : { background: '#ffffff', color: '#333', border: '1px solid #bfc7d1' }" @click.stop="viewMode = 'main'">主视图</button>
-                     <button class="btn btn-small floating-btn" :style="viewMode === 'flowDiagram' ? { background: '#4A90E2', color: '#fff', border: '1px solid #4A90E2' } : { background: '#ffffff', color: '#333', border: '1px solid #bfc7d1' }" @click.stop="viewMode = 'flowDiagram'">流程图</button>
+             <div style="position: absolute; left: 12px; bottom: 12px; z-index: 100; display: flex; flex-direction: column; gap: 6px; width: 170px;">
+                 <div v-if="viewMode === 'flowDiagram'" style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; width: 100%;">
+                     <button class="btn btn-small floating-btn" style="width: 100%; margin: 0; font-size: 12px; padding: 5px 7px;" @click.stop="openFlowDiagramSettings">流程图设置</button>
+                     <button class="btn btn-small floating-btn" style="width: 100%; margin: 0; font-size: 12px; padding: 5px 7px;" @click.stop="openFlowDiagramLegendSettings">图例设置</button>
+                 </div>
+                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; width: 100%;">
+                     <button class="btn btn-small floating-btn" style="width: 100%; margin: 0;" :style="viewMode === 'main' ? { background: '#4A90E2', color: '#fff', border: '1px solid #4A90E2' } : { background: '#ffffff', color: '#333', border: '1px solid #bfc7d1' }" @click.stop="viewMode = 'main'">主视图</button>
+                     <button class="btn btn-small floating-btn" style="width: 100%; margin: 0;" :style="viewMode === 'flowDiagram' ? { background: '#4A90E2', color: '#fff', border: '1px solid #4A90E2' } : { background: '#ffffff', color: '#333', border: '1px solid #bfc7d1' }" @click.stop="viewMode = 'flowDiagram'">流程图</button>
                  </div>
              </div>
 
@@ -301,7 +304,7 @@
              <div v-if="showLegendSettingsModal" style="position: fixed; z-index: 1000;" :style="{ left: legendModalPosition.left, top: legendModalPosition.top }" @mousedown.stop>
                  <div class="modal-content" style="max-width: 500px; padding: 20px; margin: 0; box-shadow: 0 5px 20px rgba(0,0,0,0.5); border: 1px solid #444;">
                      <div class="modal-header" style="cursor: move; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;" @mousedown="startDragLegendSettings">
-                         <h3 style="margin: 0; user-select: none;">图例设置</h3>
+                         <h3 style="margin: 0; user-select: none;">主视图图例设置</h3>
                          <button class="btn btn-small" @click="showLegendSettingsModal = false" style="margin: 0;">✕</button>
                      </div>
                      
@@ -491,6 +494,26 @@
 
                      <div class="modal-actions" style="margin-top: 10px;">
                          <button class="btn btn-primary" @click="showFlowDiagramSettingsModal = false" style="width: 100%;">确定</button>
+                     </div>
+                 </div>
+             </div>
+
+             <!-- 流程图图例设置模态框 -->
+             <div v-if="showFlowDiagramLegendSettingsModal" style="position: fixed; z-index: 1000;" :style="{ left: flowDiagramLegendModalPosition.left, top: flowDiagramLegendModalPosition.top }" @mousedown.stop>
+                 <div class="modal-content" style="max-width: 420px; padding: 20px; margin: 0; box-shadow: 0 5px 20px rgba(0,0,0,0.5); border: 1px solid #444;">
+                     <div class="modal-header" style="cursor: move; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center;" @mousedown="startDragFlowDiagramLegendSettings">
+                         <h3 style="margin: 0; user-select: none;">流程图图例设置</h3>
+                         <button class="btn btn-small" @click="showFlowDiagramLegendSettingsModal = false" style="margin: 0;">✕</button>
+                     </div>
+
+                     <div style="background: #1f2937; border: 1px solid #374151; border-radius: 6px; padding: 12px; color: #d1d5db; line-height: 1.6; font-size: 13px;">
+                         <div style="color: #93c5fd; font-weight: bold; margin-bottom: 6px;">Phase A 已建立独立入口</div>
+                         <div>这里后续只放流程图图例的排版设置：是否启用、位置、宽度、每行个数、文字大小、方块大小。</div>
+                         <div style="margin-top: 8px;">图例内容、字体、颜色、文字来源会读取主视图图例设置，不在这里重复维护。</div>
+                     </div>
+
+                     <div class="modal-actions" style="margin-top: 16px;">
+                         <button class="btn btn-primary" @click="showFlowDiagramLegendSettingsModal = false" style="width: 100%;">确定</button>
                      </div>
                  </div>
              </div>
