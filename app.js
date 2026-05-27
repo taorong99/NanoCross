@@ -6,7 +6,7 @@ const App = {
         const store = useStore();
         const history = useHistory(store.processSteps, store.variables, store.flowDiagramSettings, store.normalizeFlowDiagramSettings);
 
-        const variablesMinimized = ref(false);
+        const variablesMinimized = ref(true);
         const showExportMenu = ref(false);
         const showLegendSettingsModal = ref(false);
         const showFlowDiagramSettingsModal = ref(false);
@@ -1184,7 +1184,8 @@ const App = {
             pendingPreviewDownload.value = null;
         };
 
-        const applyData = (data) => {
+        const applyData = async (data) => {
+            flowDiagramPipeline.resetFlowDiagram();
             if (data.projectName) {
                 store.projectName.value = data.projectName;
             }
@@ -1204,6 +1205,10 @@ const App = {
                 Object.assign(store.legendSettings.value, data.legendSettings);
             }
             store.flowDiagramSettings.value = store.normalizeFlowDiagramSettings(data.flowDiagramSettings);
+            if (store.viewMode.value === 'flowDiagram') {
+                await nextTick();
+                await flowDiagramPipeline.generateFlowDiagram();
+            }
         };
 
         const loadFile = async () => {
@@ -1227,7 +1232,7 @@ const App = {
                     if (!loadRes.ok) throw new Error(`项目 "${inputName}" 不存在或读取失败`);
 
                     const data = await loadRes.json();
-                    applyData(data);
+                    await applyData(data);
                 }
             } catch (err) {
                 useLocal = true;
@@ -1242,10 +1247,10 @@ const App = {
                     const file = e.target.files[0];
                     if (!file) return;
                     const reader = new FileReader();
-                    reader.onload = (re) => {
+                    reader.onload = async (re) => {
                         try {
                             const data = JSON.parse(re.target.result);
-                            applyData(data);
+                            await applyData(data);
                         } catch (err) {
                             alert('无效的 JSON 文件格式');
                         }

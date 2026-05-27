@@ -107,6 +107,25 @@ function useFlowDiagramPipeline(options) {
         rebuildItems();
     };
 
+    const resetFlowDiagram = () => {
+        if (refreshTimer) {
+            clearTimeout(refreshTimer);
+            refreshTimer = null;
+        }
+        generationToken += 1;
+        allStepGeometry.value = [];
+        items.value = [];
+        flowDiagramGenerationError.value = '';
+        flowDiagramProgressDone.value = 0;
+        flowDiagramProgressTotal.value = 0;
+        flowDiagramGenerationSummary.value = {
+            generatedAt: 0,
+            quality: flowDiagramSettings.value.quality,
+            count: 0
+        };
+        isFlowDiagramDirty.value = true;
+    };
+
     const getScaleMeta = (snapshots) => {
         let subLeft = -400;
         let subRight = 400;
@@ -347,6 +366,7 @@ function useFlowDiagramPipeline(options) {
         generateFlowDiagram,
         markDirty,
         suspendNextAutoRefresh,
-        rebuildFlowDiagramLayout
+        rebuildFlowDiagramLayout,
+        resetFlowDiagram
     };
 }
