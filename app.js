@@ -180,19 +180,123 @@ const App = {
         const flowDiagramCards = computed(() => flowDiagramPipeline.items.value);
         const hiddenFlowDiagramSteps = computed(() => flowDiagramPipeline.hiddenItems.value);
 
-        const flowDiagramGridStyle = computed(() => ({
-            display: 'grid',
-            gridTemplateColumns: `repeat(${flowDiagramLayout.value.effectiveItemsPerRow}, minmax(${FLOW_DIAGRAM_MIN_CARD_WIDTH}px, 1fr))`,
-            columnGap: `${store.flowDiagramSettings.value.gapX}px`,
-            rowGap: `${store.flowDiagramSettings.value.gapY}px`
-        }));
+        const getFlowDiagramCardChrome = () => (
+            ['full', 'minimal', 'none'].includes(store.flowDiagramSettings.value.cardChrome)
+                ? store.flowDiagramSettings.value.cardChrome
+                : 'full'
+        );
+
+        const getFlowDiagramCardMetrics = (options = {}) => {
+            const includeEditorChrome = options.includeEditorChrome !== false;
+            const cardChrome = getFlowDiagramCardChrome();
+            const borderWidth = cardChrome === 'none' ? 0 : 1;
+            const headerHeight = includeEditorChrome && cardChrome === 'full' ? 45 : 0;
+            const gapY = Number(store.flowDiagramSettings.value.gapY) || 0;
+            const captionGapRaw = Number(store.flowDiagramSettings.value.captionGap);
+            const captionGap = Number.isFinite(captionGapRaw) ? Math.min(80, Math.max(-20, captionGapRaw)) : 12;
+            const captionHeight = store.flowDiagramSettings.value.showCaption ? Math.max(22, 36 + captionGap) : 0;
+            const captionDividerHeight = store.flowDiagramSettings.value.showCaption && cardChrome === 'full' ? 1 : 0;
+            const captionBlockHeight = captionHeight + captionDividerHeight;
+            const bodyHeight = flowDiagramLayout.value.height;
+            const minVisibleBodyHeight = Math.min(40, Math.max(1, bodyHeight));
+            // gapY 这里有两套语义：
+            // >= 0：表示两行卡片边界之间的真实距离，和横向间距语义一致。
+            // < 0：表示统一压缩每张卡片的可视窗口。此时不是让各行真实重叠，
+            //      而是把每张截面图 body 的顶部统一裁掉 -gapY，让第一行和后续行
+            //      露出的截面图内容高度一致，同时保留完整卡片边框。
+            const bodyClipTop = gapY < 0
+                ? Math.min(-gapY, Math.max(0, bodyHeight - minVisibleBodyHeight))
+                : 0;
+            const bodyVisibleHeight = Math.max(minVisibleBodyHeight, bodyHeight - bodyClipTop);
+            return {
+                borderWidth,
+                headerHeight,
+                bodyHeight,
+                bodyClipTop,
+                bodyVisibleHeight,
+                captionHeight,
+                captionBlockHeight,
+                height: borderWidth * 2 + headerHeight + bodyVisibleHeight + captionBlockHeight,
+                width: Math.max(1, flowDiagramLayout.value.width)
+            };
+        };
+
+        const getFlowDiagramLayoutFrame = (cards = flowDiagramCards.value || [], options = {}) => {
+            const boardPadding = Number(store.flowDiagramSettings.value.boardPadding) || 0;
+            const gapX = Math.max(0, Number(store.flowDiagramSettings.value.gapX) || 0);
+            const gapY = Number(store.flowDiagramSettings.value.gapY) || 0;
+            const metrics = getFlowDiagramCardMetrics(options);
+            const itemsPerRow = Math.max(1, flowDiagramLayout.value.effectiveItemsPerRow || 1);
+            const totalRows = cards.length ? Math.max(...cards.map(card => (card.rowIndex || 0))) + 1 : 0;
+            const rowPitch = Math.max(1, metrics.height + Math.max(0, gapY));
+            const boardWidth = itemsPerRow * metrics.width + Math.max(0, itemsPerRow - 1) * gapX + boardPadding * 2;
+            const contentHeight = totalRows > 0
+                ? metrics.height + Math.max(0, totalRows - 1) * rowPitch
+                : 0;
+            const boardHeight = contentHeight + boardPadding * 2;
+            return {
+                boardPadding,
+                gapX,
+                gapY,
+                itemsPerRow,
+                totalRows,
+                cardWidth: metrics.width,
+                cardHeight: metrics.height,
+                cardBorderWidth: metrics.borderWidth,
+                cardHeaderHeight: metrics.headerHeight,
+                cardBodyHeight: metrics.bodyHeight,
+                cardBodyClipTop: metrics.bodyClipTop,
+                cardBodyVisibleHeight: metrics.bodyVisibleHeight,
+                captionHeight: metrics.captionHeight,
+                captionBlockHeight: metrics.captionBlockHeight,
+                rowPitch,
+                boardWidth,
+                boardHeight: Math.max(boardPadding * 2, boardHeight)
+            };
+        };
+
+        const flowDiagramGridStyle = computed(() => {
+            const frame = getFlowDiagramLayoutFrame();
+            return {
+                position: 'relative',
+                width: `${frame.boardWidth - frame.boardPadding * 2}px`,
+                height: `${Math.max(0, frame.boardHeight - frame.boardPadding * 2)}px`
+            };
+        });
+
+        const getFlowDiagramCardStyle = (card) => {
+            const frame = getFlowDiagramLayoutFrame();
+            const x = (card.colIndex || 0) * (frame.cardWidth + frame.gapX);
+            const y = (card.rowIndex || 0) * frame.rowPitch;
+            return {
+                position: 'absolute',
+                left: `${x}px`,
+                top: `${y}px`,
+                width: `${frame.cardWidth}px`
+            };
+        };
+
+        const getFlowDiagramCardRenderMeta = () => {
+            const frame = getFlowDiagramLayoutFrame();
+            return {
+                cardHeight: frame.cardHeight,
+                borderWidth: frame.cardBorderWidth,
+                headerHeight: frame.cardHeaderHeight,
+                bodyHeight: frame.cardBodyHeight,
+                bodyClipTop: frame.cardBodyClipTop,
+                bodyVisibleHeight: frame.cardBodyVisibleHeight,
+                captionHeight: frame.captionHeight,
+                captionBlockHeight: frame.captionBlockHeight
+            };
+        };
 
         const flowDiagramBoardStyle = computed(() => ({
             background: store.flowDiagramSettings.value.boardBackground,
             padding: `${store.flowDiagramSettings.value.boardPadding}px`,
             minHeight: '100%',
             boxSizing: 'border-box',
-            borderRadius: '8px'
+            borderRadius: '8px',
+            overflow: 'visible'
         }));
 
         const updateFlowDiagramBoardMetrics = () => {
@@ -458,6 +562,13 @@ const App = {
             }
         });
 
+        watch(() => store.flowDiagramSettings.value.boardPadding, () => {
+            if (store.viewMode.value !== 'flowDiagram') return;
+            nextTick(() => {
+                updateFlowDiagramBoardMetrics();
+            });
+        });
+
         watch([
             () => store.viewMode.value,
             triggerResize
@@ -662,25 +773,22 @@ const App = {
             const cards = flowDiagramCards.value || [];
             if (!cards.length) return null;
 
-            const boardPadding = Number(store.flowDiagramSettings.value.boardPadding) || 0;
-            const gapX = Number(store.flowDiagramSettings.value.gapX) || 0;
-            const gapY = Number(store.flowDiagramSettings.value.gapY) || 0;
-            const cardChrome = ['full', 'minimal', 'none'].includes(store.flowDiagramSettings.value.cardChrome)
-                ? store.flowDiagramSettings.value.cardChrome
-                : 'full';
+            const frame = getFlowDiagramLayoutFrame(cards, { includeEditorChrome: false });
+            const boardPadding = frame.boardPadding;
+            const gapX = frame.gapX;
+            const cardChrome = getFlowDiagramCardChrome();
             const captionGapRaw = Number(store.flowDiagramSettings.value.captionGap);
             const captionGap = Number.isFinite(captionGapRaw) ? Math.min(80, Math.max(-20, captionGapRaw)) : 12;
-            const captionHeight = store.flowDiagramSettings.value.showCaption ? Math.max(22, 36 + captionGap) : 0;
             const captionTextOffset = Math.max(8, captionGap + 18);
-            const cardHeaderHeight = 0;
-            const cardBodyHeight = flowDiagramLayout.value.height;
-            const cardHeight = cardHeaderHeight + cardBodyHeight + captionHeight;
-            const itemsPerRow = Math.max(1, flowDiagramLayout.value.effectiveItemsPerRow || 1);
-            const cardWidth = Math.max(1, flowDiagramLayout.value.width);
-            const totalRows = cards.length ? Math.max(...cards.map(card => (card.rowIndex || 0))) + 1 : 0;
-            const boardWidth = itemsPerRow * cardWidth + Math.max(0, itemsPerRow - 1) * gapX + boardPadding * 2;
-            const cardsHeight = totalRows > 0 ? (totalRows * cardHeight) + Math.max(0, totalRows - 1) * gapY : 0;
-            const boardHeight = cardsHeight + boardPadding * 2;
+            const cardBorderWidth = frame.cardBorderWidth;
+            const cardHeaderHeight = frame.cardHeaderHeight;
+            const cardBodyHeight = frame.cardBodyHeight;
+            const cardBodyClipTop = frame.cardBodyClipTop;
+            const cardBodyVisibleHeight = frame.cardBodyVisibleHeight;
+            const cardHeight = frame.cardHeight;
+            const cardWidth = frame.cardWidth;
+            const boardWidth = frame.boardWidth;
+            const boardHeight = frame.boardHeight;
             const captionAnchor = getFlowDiagramCaptionAnchor();
 
             let svgParts = [
@@ -690,7 +798,7 @@ const App = {
 
             cards.forEach(card => {
                 const x = boardPadding + (card.colIndex || 0) * (cardWidth + gapX);
-                const y = boardPadding + (card.rowIndex || 0) * (cardHeight + gapY);
+                const y = boardPadding + (card.rowIndex || 0) * frame.rowPitch;
                 const captionTextAnchor = captionAnchor || 'middle';
                 const captionTextX = captionTextAnchor === 'start'
                     ? 18
@@ -705,9 +813,22 @@ const App = {
                 } else {
                     svgParts.push(`<rect x="0" y="0" width="${cardWidth}" height="${cardHeight}" fill="#ffffff"/>`);
                 }
-                svgParts.push(`<rect x="0" y="${cardHeaderHeight}" width="${cardWidth}" height="${cardBodyHeight}" fill="#ffffff"/>`);
+                const viewBoxParts = String(card.viewBox || '0 0 1 1').split(/\s+/).map(Number);
+                const viewBoxX = Number.isFinite(viewBoxParts[0]) ? viewBoxParts[0] : 0;
+                const viewBoxY = Number.isFinite(viewBoxParts[1]) ? viewBoxParts[1] : 0;
+                const viewBoxW = Number.isFinite(viewBoxParts[2]) && viewBoxParts[2] > 0 ? viewBoxParts[2] : 1;
+                const viewBoxH = Number.isFinite(viewBoxParts[3]) && viewBoxParts[3] > 0 ? viewBoxParts[3] : 1;
+                // 导出时复用预览里的压缩语义：gapY < 0 时，每张卡片都展示
+                // 同一个被裁剪后的 body 视窗，而不是依赖行与行之间真实重叠。
+                // 这样可以保留完整边框，也能避免第一行看起来比后续行更高。
+                const clippedViewBoxY = viewBoxY + (cardBodyClipTop / Math.max(cardBodyHeight, 1)) * viewBoxH;
+                const clippedViewBoxH = Math.max(1, (cardBodyVisibleHeight / Math.max(cardBodyHeight, 1)) * viewBoxH);
+                const contentX = cardBorderWidth;
+                const contentY = cardBorderWidth + cardHeaderHeight;
+                const contentWidth = Math.max(1, cardWidth - cardBorderWidth * 2);
+                svgParts.push(`<rect x="${contentX}" y="${contentY}" width="${contentWidth}" height="${cardBodyVisibleHeight}" fill="#ffffff"/>`);
                 svgParts.push(
-                    `<svg x="0" y="${cardHeaderHeight}" width="${cardWidth}" height="${cardBodyHeight}" viewBox="${card.viewBox}" preserveAspectRatio="none">`
+                    `<svg x="${contentX}" y="${contentY}" width="${contentWidth}" height="${cardBodyVisibleHeight}" viewBox="${viewBoxX} ${clippedViewBoxY} ${viewBoxW} ${clippedViewBoxH}" preserveAspectRatio="none">`
                 );
                 card.paths.forEach(path => {
                     svgParts.push(`<path d="${path.d}" fill="${path.fill}"></path>`);
@@ -716,10 +837,10 @@ const App = {
 
                 if (store.flowDiagramSettings.value.showCaption) {
                     if (cardChrome === 'full') {
-                        svgParts.push(`<line x1="0" y1="${cardHeaderHeight + cardBodyHeight}" x2="${cardWidth}" y2="${cardHeaderHeight + cardBodyHeight}" stroke="#ececec" stroke-width="1"/>`);
+                        svgParts.push(`<line x1="${contentX}" y1="${contentY + cardBodyVisibleHeight}" x2="${contentX + contentWidth}" y2="${contentY + cardBodyVisibleHeight}" stroke="#ececec" stroke-width="1"/>`);
                     }
                     svgParts.push(
-                        `<text x="${captionTextX}" y="${cardHeaderHeight + cardBodyHeight + captionTextOffset}" text-anchor="${captionTextAnchor}" font-family="${store.flowDiagramSettings.value.fontFamily}" font-size="${store.flowDiagramSettings.value.fontSize}" fill="${store.flowDiagramSettings.value.fontColor}">${escapedCaption}</text>`
+                        `<text x="${captionTextX}" y="${contentY + cardBodyVisibleHeight + (cardChrome === 'full' ? 1 : 0) + captionTextOffset}" text-anchor="${captionTextAnchor}" font-family="${store.flowDiagramSettings.value.fontFamily}" font-size="${store.flowDiagramSettings.value.fontSize}" fill="${store.flowDiagramSettings.value.fontColor}">${escapedCaption}</text>`
                     );
                 }
 
@@ -970,6 +1091,8 @@ const App = {
             flowDiagramCards,
             hiddenFlowDiagramSteps,
             flowDiagramGridStyle,
+            getFlowDiagramCardStyle,
+            getFlowDiagramCardRenderMeta,
             flowDiagramBoardStyle,
             flowDiagramSummaryText,
             flowDiagramBoardRef,

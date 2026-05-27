@@ -163,7 +163,8 @@ function registerComponents(app) {
             'flowDiagramDraftCaption',
             'captionAnchor',
             'captionX',
-            'captionPreview'
+            'captionPreview',
+            'renderMeta'
         ],
         emits: [
             'toggle-hidden',
@@ -190,17 +191,20 @@ function registerComponents(app) {
             cardContainerStyle() {
                 const border = this.cardChrome === 'full'
                     ? '1px solid #d1d5db'
-                    : (this.cardChrome === 'minimal' ? '1px solid rgba(148, 163, 184, 0.45)' : '1px solid transparent');
+                    : (this.cardChrome === 'minimal' ? '1px solid rgba(148, 163, 184, 0.45)' : 'none');
                 const boxShadow = this.cardChrome === 'full'
                     ? '0 6px 20px rgba(0,0,0,0.05)'
                     : 'none';
+                const cardHeight = Number(this.renderMeta && this.renderMeta.cardHeight);
                 return {
                     position: 'relative',
                     border,
                     borderRadius: '0',
                     background: '#fff',
                     overflow: 'hidden',
-                    boxShadow
+                    boxShadow,
+                    boxSizing: 'border-box',
+                    height: (Number.isFinite(cardHeight) && cardHeight > 0 ? cardHeight : 'auto') + (Number.isFinite(cardHeight) && cardHeight > 0 ? 'px' : '')
                 };
             },
             captionGap() {
@@ -219,11 +223,25 @@ function registerComponents(app) {
             },
             captionBorderStyle() {
                 return this.isFullChrome ? '1px solid #ececec' : 'none';
+            },
+            bodyClipTop() {
+                const clip = Number(this.renderMeta && this.renderMeta.bodyClipTop);
+                return Number.isFinite(clip) ? Math.max(0, clip) : 0;
+            },
+            bodyVisibleHeight() {
+                const visibleHeight = Number(this.renderMeta && this.renderMeta.bodyVisibleHeight);
+                if (Number.isFinite(visibleHeight) && visibleHeight > 0) return visibleHeight;
+                const bodyHeight = Number(this.renderMeta && this.renderMeta.bodyHeight);
+                return Number.isFinite(bodyHeight) && bodyHeight > 0 ? bodyHeight : 100;
+            },
+            headerHeight() {
+                const height = Number(this.renderMeta && this.renderMeta.headerHeight);
+                return Number.isFinite(height) && height > 0 ? height : 0;
             }
         },
         template: `
             <div :style="cardContainerStyle" class="flow-diagram-card">
-                <div v-if="isFullChrome" style="display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid #ececec; background: #fafafa;">
+                <div v-if="isFullChrome" :style="{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', padding: '10px 12px', height: headerHeight + 'px', boxSizing: 'border-box', borderBottom: '1px solid #ececec', background: '#fafafa' }">
                     <div style="font-size: 12px; color: #666;">
                         Step {{ card.index }}
                     </div>
@@ -240,8 +258,8 @@ function registerComponents(app) {
                     隐藏
                 </button>
 
-                <div style="padding: 0;">
-                    <svg xmlns="http://www.w3.org/2000/svg" :viewBox="card.viewBox" preserveAspectRatio="none" width="100%" style="display: block; aspect-ratio: 1 / 0.72; background: #ffffff; border-radius: 0;">
+                <div :style="{ padding: 0, height: bodyVisibleHeight + 'px', overflow: 'hidden', background: '#ffffff' }">
+                    <svg xmlns="http://www.w3.org/2000/svg" :viewBox="card.viewBox" preserveAspectRatio="none" width="100%" :height="renderMeta && renderMeta.bodyHeight ? renderMeta.bodyHeight : '100%'" :style="{ display: 'block', background: '#ffffff', borderRadius: '0', transform: 'translateY(-' + bodyClipTop + 'px)' }">
                         <g>
                             <path v-for="path in card.paths" :key="path.id" :d="path.d" :fill="path.fill"></path>
                         </g>

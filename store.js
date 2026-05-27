@@ -33,6 +33,10 @@ function useStore() {
         merged.captionGap = Number.isFinite(parsedCaptionGap)
             ? Math.min(80, Math.max(-20, parsedCaptionGap))
             : defaults.captionGap;
+        const parsedGapY = Number(merged.gapY);
+        merged.gapY = Number.isFinite(parsedGapY)
+            ? Math.min(300, Math.max(-200, parsedGapY))
+            : defaults.gapY;
         merged.hiddenStepIds = Array.isArray(merged.hiddenStepIds) ? [...merged.hiddenStepIds] : [];
         if (!['draft', 'balanced', 'high'].includes(merged.quality)) {
             merged.quality = defaults.quality;

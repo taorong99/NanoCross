@@ -274,22 +274,27 @@
                      @refresh="refreshFlowDiagram"
                      @show-step="showFlowDiagramStep"
                  >
-                     <flow-diagram-card
+                     <div
                          v-for="card in flowDiagramCards"
                          :key="'flow-card-' + card.stepId"
-                         :card="card"
-                         :flow-diagram-settings="flowDiagramSettings"
-                         :editing-flow-diagram-step-id="editingFlowDiagramStepId"
-                         :flow-diagram-draft-caption="flowDiagramDraftCaption"
-                         :caption-anchor="getFlowDiagramCaptionAnchor()"
-                         :caption-x="getFlowDiagramCaptionX()"
-                         :caption-preview="getFlowDiagramCaptionPreview(card.step)"
-                         @toggle-hidden="toggleFlowDiagramStepHidden"
-                         @start-edit="startEditingFlowDiagramCaption"
-                         @update:draft-caption="flowDiagramDraftCaption = $event"
-                         @caption-keydown="handleFlowDiagramCaptionKeydown"
-                         @commit-caption="commitFlowDiagramCaption"
-                     />
+                         :style="getFlowDiagramCardStyle(card)"
+                     >
+                         <flow-diagram-card
+                             :card="card"
+                             :flow-diagram-settings="flowDiagramSettings"
+                             :editing-flow-diagram-step-id="editingFlowDiagramStepId"
+                             :flow-diagram-draft-caption="flowDiagramDraftCaption"
+                             :caption-anchor="getFlowDiagramCaptionAnchor()"
+                             :caption-x="getFlowDiagramCaptionX()"
+                             :caption-preview="getFlowDiagramCaptionPreview(card.step)"
+                             :render-meta="getFlowDiagramCardRenderMeta()"
+                             @toggle-hidden="toggleFlowDiagramStepHidden"
+                             @start-edit="startEditingFlowDiagramCaption"
+                             @update:draft-caption="flowDiagramDraftCaption = $event"
+                             @caption-keydown="handleFlowDiagramCaptionKeydown"
+                             @commit-caption="commitFlowDiagramCaption"
+                         />
+                     </div>
                  </flow-diagram-board>
              </div>
              
@@ -492,7 +497,7 @@
                          </div>
                          <div style="flex: 1;">
                              <label>纵向间距</label>
-                             <input type="number" min="0" v-model.number="flowDiagramSettings.gapY" class="form-control">
+                             <input type="number" min="-200" v-model.number="flowDiagramSettings.gapY" class="form-control">
                          </div>
                      </div>
 
