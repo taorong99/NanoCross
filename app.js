@@ -43,7 +43,7 @@ const App = {
         const flowDiagramBoardRef = ref(null);
         const flowDiagramBoardWidth = ref(0);
         const FLOW_DIAGRAM_MIN_CARD_WIDTH = 100;
-        const FLOW_DIAGRAM_MIN_CARD_HEIGHT = 100;
+        const FLOW_DIAGRAM_MIN_BODY_HEIGHT = 40;
         const FLOW_DIAGRAM_LEGEND_MARGIN = 12;
         const FLOW_DIAGRAM_LEGEND_PADDING = 10;
         const FLOW_DIAGRAM_LEGEND_MIN_WIDTH = 40;
@@ -65,12 +65,10 @@ const App = {
                 FLOW_DIAGRAM_MIN_CARD_WIDTH,
                 Math.floor((boardWidth - totalGap) / effectiveItemsPerRow)
             );
-            const height = Math.max(FLOW_DIAGRAM_MIN_CARD_HEIGHT, Math.round(width * 0.72));
             return {
                 requestedItemsPerRow,
                 effectiveItemsPerRow,
-                width,
-                height
+                width
             };
         });
         const stepMetaMap = computed(() => {
@@ -209,7 +207,7 @@ const App = {
                 : 'full'
         );
 
-        const getFlowDiagramCardMetrics = (options = {}) => {
+        const getFlowDiagramCardMetrics = (cards = flowDiagramCards.value || [], options = {}) => {
             const includeEditorChrome = options.includeEditorChrome !== false;
             const cardChrome = getFlowDiagramCardChrome();
             const borderWidth = cardChrome === 'none' ? 0 : 1;
@@ -220,8 +218,20 @@ const App = {
             const captionHeight = store.flowDiagramSettings.value.showCaption ? Math.max(22, 36 + captionGap) : 0;
             const captionDividerHeight = store.flowDiagramSettings.value.showCaption && cardChrome === 'full' ? 1 : 0;
             const captionBlockHeight = captionHeight + captionDividerHeight;
-            const bodyHeight = flowDiagramLayout.value.height;
-            const minVisibleBodyHeight = Math.min(40, Math.max(1, bodyHeight));
+            const cardWidth = Math.max(1, flowDiagramLayout.value.width);
+            const bodyWidth = Math.max(1, cardWidth - borderWidth * 2);
+            const bodyYScaleRaw = Number(store.flowDiagramSettings.value.bodyYScale);
+            const bodyYScale = Number.isFinite(bodyYScaleRaw)
+                ? Math.min(5, Math.max(0.2, bodyYScaleRaw))
+                : 1;
+            const firstCard = cards && cards.length ? cards[0] : null;
+            const viewBoxWidth = Math.max(1, Number(firstCard && firstCard.normalizedWidth) || 1);
+            const viewBoxHeight = Math.max(1, Number(firstCard && firstCard.normalizedHeight) || 1);
+            const scaleX = bodyWidth / viewBoxWidth;
+            const scaleY = scaleX * bodyYScale;
+            const bodyHeight = Math.max(FLOW_DIAGRAM_MIN_BODY_HEIGHT, viewBoxHeight * scaleY);
+            // 负纵向间距只裁剪可视窗口，至少保留一段截面图区域，避免子图被完全裁掉。
+            const minVisibleBodyHeight = FLOW_DIAGRAM_MIN_BODY_HEIGHT;
             // gapY 这里有两套语义：
             // >= 0：表示两行卡片边界之间的真实距离，和横向间距语义一致。
             // < 0：表示统一压缩每张卡片的可视窗口。此时不是让各行真实重叠，
@@ -240,7 +250,7 @@ const App = {
                 captionHeight,
                 captionBlockHeight,
                 height: borderWidth * 2 + headerHeight + bodyVisibleHeight + captionBlockHeight,
-                width: Math.max(1, flowDiagramLayout.value.width)
+                width: cardWidth
             };
         };
 
@@ -360,7 +370,7 @@ const App = {
             const boardPadding = Number(store.flowDiagramSettings.value.boardPadding) || 0;
             const gapX = Math.max(0, Number(store.flowDiagramSettings.value.gapX) || 0);
             const gapY = Number(store.flowDiagramSettings.value.gapY) || 0;
-            const metrics = getFlowDiagramCardMetrics(options);
+            const metrics = getFlowDiagramCardMetrics(cards, options);
             const itemsPerRow = Math.max(1, flowDiagramLayout.value.effectiveItemsPerRow || 1);
             const totalRows = cards.length ? Math.max(...cards.map(card => (card.rowIndex || 0))) + 1 : 0;
             const rowPitch = Math.max(1, metrics.height + Math.max(0, gapY));

@@ -453,6 +453,10 @@
                              <label title="控制截面图底部和说明文字之间的距离，不是文字行距。">图文间距</label>
                              <input type="number" min="-20" max="80" v-model.number="flowDiagramSettings.captionGap" class="form-control">
                          </div>
+                         <div style="flex: 1;">
+                             <label title="以X方向缩放为基准，控制截面图Y方向的视觉缩放。1表示X/Y等比例。">Y向缩放</label>
+                             <input type="number" min="0.2" max="5" step="0.1" v-model.number="flowDiagramSettings.bodyYScale" class="form-control">
+                         </div>
                      </div>
 
                      <div class="form-group" style="margin-bottom: 12px;">

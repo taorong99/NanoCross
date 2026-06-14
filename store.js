@@ -22,6 +22,7 @@ function useStore() {
         textAlign: 'center',
         cardChrome: 'full',
         captionGap: 12,
+        bodyYScale: 1,
         gapX: 24,
         gapY: 24,
         boardPadding: 20,
@@ -81,6 +82,10 @@ function useStore() {
         merged.captionGap = Number.isFinite(parsedCaptionGap)
             ? Math.min(80, Math.max(-20, parsedCaptionGap))
             : defaults.captionGap;
+        const parsedBodyYScale = Number(merged.bodyYScale);
+        merged.bodyYScale = Number.isFinite(parsedBodyYScale)
+            ? Math.min(5, Math.max(0.2, parsedBodyYScale))
+            : defaults.bodyYScale;
         const parsedGapY = Number(merged.gapY);
         merged.gapY = Number.isFinite(parsedGapY)
             ? Math.min(300, Math.max(-200, parsedGapY))
