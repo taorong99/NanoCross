@@ -16,6 +16,7 @@ function useStore() {
     const createDefaultFlowDiagramSettings = () => ({
         itemsPerRow: 4,
         showCaption: true,
+        showCaptionNumber: false,
         fontFamily: 'Arial',
         fontSize: 14,
         fontColor: '#000000',
@@ -75,6 +76,7 @@ function useStore() {
         const merged = { ...defaults, ...(settings || {}) };
         const parsedItemsPerRow = parseInt(merged.itemsPerRow, 10);
         merged.itemsPerRow = Number.isFinite(parsedItemsPerRow) && parsedItemsPerRow > 0 ? parsedItemsPerRow : defaults.itemsPerRow;
+        merged.showCaptionNumber = Boolean(merged.showCaptionNumber);
         if (!['full', 'minimal', 'none'].includes(merged.cardChrome)) {
             merged.cardChrome = defaults.cardChrome;
         }

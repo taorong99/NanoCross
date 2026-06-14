@@ -275,7 +275,7 @@
                      @show-step="showFlowDiagramStep"
                  >
                      <div
-                         v-for="card in flowDiagramCards"
+                         v-for="(card, cardIndex) in flowDiagramCards"
                          :key="'flow-card-' + card.stepId"
                          :style="getFlowDiagramCardStyle(card)"
                      >
@@ -286,7 +286,7 @@
                              :flow-diagram-draft-caption="flowDiagramDraftCaption"
                              :caption-anchor="getFlowDiagramCaptionAnchor()"
                              :caption-x="getFlowDiagramCaptionX()"
-                             :caption-preview="getFlowDiagramCaptionPreview(card.step)"
+                             :caption-preview="getFlowDiagramDisplayCaption(card, cardIndex)"
                              :render-meta="getFlowDiagramCardRenderMeta()"
                              @toggle-hidden="toggleFlowDiagramStepHidden"
                              @start-edit="startEditingFlowDiagramCaption"
@@ -463,6 +463,13 @@
                          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                              <input type="checkbox" v-model="flowDiagramSettings.showCaption">
                              <span style="font-weight: bold; color: #4A90E2;">显示子图文字</span>
+                         </label>
+                     </div>
+
+                     <div class="form-group" style="margin-bottom: 12px;">
+                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                             <input type="checkbox" v-model="flowDiagramSettings.showCaptionNumber">
+                             <span style="font-weight: bold; color: #4A90E2;">显示文字序号</span>
                          </label>
                      </div>
 

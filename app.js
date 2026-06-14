@@ -612,9 +612,13 @@ const App = {
             return 150;
         };
 
-        const getFlowDiagramCaptionPreview = (step) => {
-            if (!step) return '';
-            return step.flowDiagramCaption || step.name || '';
+        const getFlowDiagramDisplayCaption = (card, index) => {
+            const step = card && card.step ? card.step : null;
+            const caption = card && typeof card.caption === 'string'
+                ? card.caption
+                : (step ? (step.flowDiagramCaption || step.name || '') : '');
+            if (!store.flowDiagramSettings.value.showCaptionNumber) return caption;
+            return `${index + 1}. ${caption}`;
         };
 
         const escapeSvgText = (value) => String(value || '')
@@ -1027,14 +1031,14 @@ const App = {
                 `<rect x="0" y="0" width="${boardWidth}" height="${boardHeight}" fill="${store.flowDiagramSettings.value.boardBackground}"/>`
             ];
 
-            cards.forEach(card => {
+            cards.forEach((card, cardIndex) => {
                 const x = boardPadding + (card.colIndex || 0) * (cardWidth + gapX);
                 const y = boardPadding + frame.cardsOffsetY + (card.rowIndex || 0) * frame.rowPitch;
                 const captionTextAnchor = captionAnchor || 'middle';
                 const captionTextX = captionTextAnchor === 'start'
                     ? 18
                     : (captionTextAnchor === 'end' ? Math.max(18, cardWidth - 18) : cardWidth / 2);
-                const escapedCaption = escapeSvgText(card.caption);
+                const escapedCaption = escapeSvgText(getFlowDiagramDisplayCaption(card, cardIndex));
 
                 svgParts.push(`<g transform="translate(${x}, ${y})">`);
                 if (cardChrome === 'full') {
@@ -1354,7 +1358,7 @@ const App = {
             handleFlowDiagramCaptionKeydown,
             getFlowDiagramCaptionAnchor,
             getFlowDiagramCaptionX,
-            getFlowDiagramCaptionPreview,
+            getFlowDiagramDisplayCaption,
             showExportMenu,
             showLegendSettingsModal,
             showFlowDiagramSettingsModal,
